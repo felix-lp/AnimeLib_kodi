@@ -64,7 +64,7 @@ _default_opener = make_opener()
 
 
 def fetch(url, params=None, data=None, json_body=None, headers=None, method=None,
-          opener=None, retries=2):
+          opener=None, retries=2, timeout=TIMEOUT):
     """Performs a request and returns Response for any HTTP status (raises only on network errors)."""
     if params:
         url += ('&' if '?' in url else '?') + urlencode(params, doseq=True)
@@ -86,7 +86,7 @@ def fetch(url, params=None, data=None, json_body=None, headers=None, method=None
     while True:
         req = Request(url, data=body, headers=hdrs, method=method)
         try:
-            with opener.open(req, timeout=TIMEOUT) as resp:
+            with opener.open(req, timeout=timeout) as resp:
                 result = Response(resp.status, resp.headers, _decode_body(resp), url)
         except HTTPError as e:
             try:
@@ -101,6 +101,22 @@ def fetch(url, params=None, data=None, json_body=None, headers=None, method=None
             time.sleep(attempt)
             continue
         return result
+
+
+def probe(url, headers=None, timeout=8):
+    """Returns the HTTP status of a GET without reading the body (None on network errors)."""
+    hdrs = {'User-Agent': USER_AGENT, 'Range': 'bytes=0-0'}
+    if headers:
+        hdrs.update(headers)
+    try:
+        resp = _default_opener.open(Request(url, headers=hdrs), timeout=timeout)
+    except HTTPError as e:
+        e.close()
+        return e.code
+    except (URLError, OSError):
+        return None
+    resp.close()
+    return resp.status
 
 
 def request(url, params=None, data=None, headers=None, **kwargs):

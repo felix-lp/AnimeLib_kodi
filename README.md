@@ -16,8 +16,8 @@
 ## Установка (с автообновлением)
 
 1. В Kodi включите *Настройки → Система → Дополнения → Неизвестные источники*.
-2. Скачайте `repository.animelib-1.0.0.zip`:
-   <https://raw.githubusercontent.com/felix-lp/AnimeLib_kodi/gh-pages/repository.animelib/repository.animelib-1.0.0.zip>
+2. Скачайте `repository.animelib-1.0.1.zip`:
+   <https://raw.githubusercontent.com/felix-lp/AnimeLib_kodi/refs/heads/gh-pages/repository.animelib/repository.animelib-1.0.1.zip>
 3. *Дополнения → Установить из ZIP-файла* → выберите скачанный файл.
 4. *Дополнения → Установить из репозитория → AnimeLib Repository → Видеодополнения → AnimeLib*.
 

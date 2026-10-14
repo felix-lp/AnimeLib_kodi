@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import time
 from urllib.parse import parse_qsl, urlencode
 
 import xbmc
@@ -19,6 +20,7 @@ ICON = ADDON.getAddonInfo('icon')
 QUALITIES = [0, 1080, 720, 480, 360]
 VIDEO_SERVERS = [None, 'main', 'secondary_1', 'secondary_2']  # None = as the site (player.video_domain)
 WATCHED_PERCENT = 85
+PLAYBACK_PROPERTY = 'plugin.video.animelib.playback'
 SEARCH_HISTORY_SIZE = 20
 NON_DIRECTORY_ACTIONS = ('new_search', 'forget_search', 'clear_search', 'login', 'logout',
                          'bookmark_add', 'bookmark_remove')
@@ -590,62 +592,53 @@ class Plugin(object):
         li.setContentLookup(False)
         if stream.subtitles:
             li.setSubtitles(stream.subtitles)
+        self._hand_over_to_service(slug, episode, player, stream)
         xbmcplugin.setResolvedUrl(self.handle, True, li)
-        self._track_playback(slug, episode, player)
 
-    def _track_playback(self, slug, episode, player):
-        """Keeps running while the episode plays: skips the opening and, once
-        WATCHED_PERCENT is reached, marks the episode as watched on the site."""
+    def _hand_over_to_service(self, slug, episode, player, stream):
+        """The background service (service.py) tracks playback: opening skip and
+        marking the episode as watched. The plugin itself must exit right away."""
         mark = self.account.logged_in and setting_bool('mark_watched')
         opening = None
         if setting_bool('skip_opening'):
             opening = next((t for t in player.get('timecode') or [] if t.get('type') == 'opening'), None)
         if not mark and not opening:
+            xbmcgui.Window(10000).clearProperty(PLAYBACK_PROPERTY)
             return
-        monitor = xbmc.Monitor()
-        kodi_player = xbmc.Player()
-        for _ in range(120):
-            if kodi_player.isPlayingVideo():
-                break
-            if monitor.waitForAbort(0.5):
-                return
-        else:
-            return
-        try:
-            playing_file = kodi_player.getPlayingFile()
-        except RuntimeError:
-            return
-        watched = False
-        while not monitor.abortRequested():
-            try:
-                if not kodi_player.isPlayingVideo() or kodi_player.getPlayingFile() != playing_file:
-                    break
-                position = kodi_player.getTime()
-                total = kodi_player.getTotalTime()
-            except RuntimeError:
-                break
-            if opening and opening.get('from', 0) <= position < (opening.get('to') or 0) - 1:
-                kodi_player.seekTime(float(opening['to']))
-                opening = None
-            if mark and not watched and total > 0 and position * 100.0 / total >= WATCHED_PERCENT:
-                watched = True
-                self._mark_watched(slug, episode, player)
-            if monitor.waitForAbort(1):
-                break
+        n = self.params.get('n')
+        xbmcgui.Window(10000).setProperty(PLAYBACK_PROPERTY, json.dumps({
+            'url': stream.url.split('|')[0],
+            'created': time.time(),
+            'slug': slug,
+            'anime_id': episode.get('anime_id'),
+            'episode_id': episode['id'],
+            'item_number': int(n) if n and n.isdigit() else None,
+            'player_id': player.get('id'),
+            'mark': mark,
+            'opening': opening,
+        }))
 
-    def _mark_watched(self, slug, episode, player):
-        """Like the site: mark the player as viewed and move the list bookmark to this episode
-        (only for titles that are already in one of the user's lists)."""
-        try:
-            self.api.mark_viewed(episode.get('anime_id'), player['id'])
-            current = self.api.media_bookmark(slug)
-            if current:
-                n = self.params.get('n')
-                self.api.set_bookmark(slug, current.get('status') or animelib.ANIME_FOLDER_WATCHING,
-                                      item_id=episode['id'], item_number=int(n) if n else None)
-            log('Marked as watched: %s #%s' % (slug, self.params.get('n')))
-        except (http.HttpError, auth.AuthError, ValueError, KeyError) as e:
-            log('Cannot mark as watched: %s' % e, xbmc.LOGWARNING)
+
+def mark_watched(data):
+    """Called by the service once WATCHED_PERCENT of the episode is played. Same as the site:
+    mark the player as viewed and move the list bookmark to this episode (only for titles
+    that are already in one of the user's lists)."""
+    addon = xbmcaddon.Addon()  # fresh instance: the service runs for the whole Kodi session
+    api_url = addon.getSetting('api_url') or animelib.DEFAULT_API
+    site_url = addon.getSetting('site_url') or 'https://anilib.me'
+    account = Account(site_url, api_url)
+    if not account.logged_in:
+        return
+    api = animelib.AnimeLib(api_url, site_url, token_provider=account.access_token)
+    try:
+        api.mark_viewed(data['anime_id'], data['player_id'])
+        current = api.media_bookmark(data['slug'])
+        if current:
+            api.set_bookmark(data['slug'], current.get('status') or animelib.ANIME_FOLDER_WATCHING,
+                             item_id=data['episode_id'], item_number=data.get('item_number'))
+        log('Marked as watched: %s #%s' % (data['slug'], data.get('item_number')))
+    except (http.HttpError, auth.AuthError, ValueError, KeyError) as e:
+        log('Cannot mark as watched: %s' % e, xbmc.LOGWARNING)
 
 
 def run():

@@ -94,6 +94,7 @@ plugin.video.animelib/
         ├── kodik.py           # получение прямых ссылок из Kodik
         ├── library.py         # экспорт в медиатеку Kodi (.strm + .nfo)
         ├── service.py         # фоновый сервис: отметка просмотра, пропуск опенинга, обновление медиатеки
+        ├── parallel.py        # параллельные HTTP-запросы без потоков (потоки роняют Python в Kodi)
         ├── players.py         # выбор плеера и качества
         ├── plugin.py          # меню и маршрутизация Kodi
         └── http.py            # HTTP на urllib (без зависимостей)

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Client for the public AnimeLib API (the one used by anilib.me itself)."""
-from . import http
+from urllib.parse import urlencode
+
+from . import http, parallel
 
 DEFAULT_API = 'https://api.cdnlibs.org/api'
 SITE_ID = '5'  # 5 = AnimeLib in the *lib family of sites
@@ -61,6 +63,27 @@ class AnimeLib(object):
     def _get(self, path, params=None, anonymous=False):
         resp = self._call(path, params, anonymous=anonymous)
         return resp.get('data', resp) if isinstance(resp, dict) else resp
+
+    def get_many(self, calls, anonymous=False, concurrency=8):
+        """Concurrent GETs without threads. calls: list of (path, params).
+        Returns a list of (status, json) — status None on network errors."""
+        headers = self._headers(anonymous=anonymous)
+        requests = []
+        for path, params in calls:
+            url = self.api + path
+            if params:
+                url += '?' + urlencode(params, doseq=True)
+            requests.append((url, headers))
+        out = []
+        for resp in parallel.get_many(requests, concurrency=concurrency):
+            if resp is None:
+                out.append((None, None))
+                continue
+            try:
+                out.append((resp.code, resp.json() if resp.code < 400 else None))
+            except http.HttpError:
+                out.append((None, None))
+        return out
 
     def _get_raw(self, path, params=None):
         return self._call(path, params)
@@ -145,6 +168,10 @@ class AnimeLib(object):
         return servers or DEFAULT_VIDEO_SERVERS
 
     # --- title -------------------------------------------------------------
+    @staticmethod
+    def anime_call(slug_url):
+        return '/anime/%s' % slug_url, [('fields[]', f) for f in ANIME_FIELDS]
+
     def anime(self, slug_url, anonymous=False):
         return self._get('/anime/%s' % slug_url, [('fields[]', f) for f in ANIME_FIELDS],
                          anonymous=anonymous)

@@ -3,9 +3,7 @@
 import json
 import os
 import sys
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl, urlencode
 
 import xbmc
@@ -25,7 +23,7 @@ WATCHED_PERCENT = 85
 PLAYBACK_PROPERTY = 'plugin.video.animelib.playback'
 META_TTL = 14 * 24 * 3600
 META_CACHE_SIZE = 3000
-META_WORKERS = 6
+META_CONCURRENCY = 8
 MISSING_TTL = 24 * 3600
 BOOKMARKS_TTL = 600
 LIBRARY_DEFAULT = 'special://profile/addon_data/plugin.video.animelib/library/'
@@ -144,20 +142,21 @@ class BookmarkMap(JsonStore):
             return self
         folders = api.bookmark_folders(user_id)
 
-        def fetch(folder):
-            slugs, page = [], 1
-            while True:
-                items, has_next = api.bookmarks(user_id, folder['id'], page)
-                slugs += [b['media']['slug_url'] for b in items if b.get('media')]
-                if not has_next:
-                    return folder['id'], slugs
-                page += 1
-
-        mapping = {}
-        with ThreadPoolExecutor(max(1, min(META_WORKERS, len(folders)))) as pool:
-            for folder_id, slugs in pool.map(fetch, folders):
-                for slug in slugs:
-                    mapping[slug] = folder_id
+        mapping, page = {}, 1
+        remaining = list(folders)
+        while remaining:  # one concurrent round per page number
+            calls = [('/bookmarks', {'user_id': user_id, 'status': f['id'], 'page': page,
+                                     'sort_by': 'updated_at', 'sort_type': 'desc'}) for f in remaining]
+            next_round = []
+            for folder, (code, resp) in zip(remaining, api.get_many(calls)):
+                if code != 200 or not resp:
+                    raise http.HttpError('HTTP %s: bookmarks' % code, code)
+                for b in resp.get('data') or []:
+                    if b.get('media'):
+                        mapping[b['media']['slug_url']] = folder['id']
+                if (resp.get('links') or {}).get('next'):
+                    next_round.append(folder)
+            remaining, page = next_round, page + 1
         self.data = {
             'user': user_id, 'ts': time.time(), 'map': mapping,
             'folders': {str(f['id']): {'name': f.get('name'), 'color': f.get('color')} for f in folders},
@@ -217,8 +216,6 @@ def make_api():
 
 class Account(JsonStore):
     """AnimeLib account: OAuth tokens, user info and credentials for silent re-login."""
-    _lock = threading.Lock()  # one refresh at a time (lists load details in threads)
-
     def __init__(self, site_url, api_url):
         JsonStore.__init__(self, 'account.json')
         self.site_url = site_url
@@ -243,10 +240,6 @@ class Account(JsonStore):
         self.save()
 
     def access_token(self, force_refresh=False):
-        with self._lock:
-            return self._access_token(force_refresh)
-
-    def _access_token(self, force_refresh=False):
         token = self.data.get('token')
         if not token:
             return None
@@ -364,21 +357,32 @@ class Plugin(object):
             else:
                 missing.append(slug)
 
-        def fetch(slug):
-            try:
-                return slug, self.api.anime(slug, anonymous=True)
-            except http.HttpError as e:
-                if e.code == 404:
-                    self.meta.put_missing(slug)
-                else:
-                    log('Cannot load %s: %s' % (slug, e), xbmc.LOGWARNING)
-                return slug, None
-
         if missing:
-            with ThreadPoolExecutor(min(META_WORKERS, len(missing))) as pool:
-                for slug, anime in pool.map(fetch, missing):
-                    if anime:
-                        result[slug] = self.meta.put(slug, anime)
+            fetched = {}
+            responses = self.api.get_many([self.api.anime_call(s) for s in missing],
+                                          anonymous=True, concurrency=META_CONCURRENCY)
+            hidden = []
+            for slug, (code, resp) in zip(missing, responses):
+                if code == 200 and resp:
+                    fetched[slug] = resp.get('data')
+                elif code == 404:
+                    hidden.append(slug)  # visible only to logged-in users
+                else:
+                    log('Cannot load %s: HTTP %s' % (slug, code), xbmc.LOGWARNING)
+            if hidden and self.account.logged_in:
+                responses = self.api.get_many([self.api.anime_call(s) for s in hidden],
+                                              concurrency=META_CONCURRENCY)
+                for slug, (code, resp) in zip(hidden, responses):
+                    if code == 200 and resp:
+                        fetched[slug] = resp.get('data')
+                    elif code == 404:
+                        self.meta.put_missing(slug)
+            elif hidden:
+                for slug in hidden:
+                    self.meta.put_missing(slug)
+            for slug, anime in fetched.items():
+                if anime:
+                    result[slug] = self.meta.put(slug, anime)
             self.meta.save()
         return result
 

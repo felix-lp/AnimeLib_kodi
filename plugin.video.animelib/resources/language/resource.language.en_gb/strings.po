@@ -1,0 +1,185 @@
+# Kodi Media Center language file
+# Addon Name: AnimeLib
+# Addon id: plugin.video.animelib
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: en_GB\n"
+
+msgctxt "#30000"
+msgid "Search"
+msgstr ""
+
+msgctxt "#30001"
+msgid "New search"
+msgstr ""
+
+msgctxt "#30002"
+msgid "Latest updates"
+msgstr ""
+
+msgctxt "#30003"
+msgid "Popular"
+msgstr ""
+
+msgctxt "#30004"
+msgid "Top rated"
+msgstr ""
+
+msgctxt "#30005"
+msgid "Recently added"
+msgstr ""
+
+msgctxt "#30006"
+msgid "Genres"
+msgstr ""
+
+msgctxt "#30007"
+msgid "Types"
+msgstr ""
+
+msgctxt "#30008"
+msgid "Next page"
+msgstr ""
+
+msgctxt "#30009"
+msgid "Choose translation"
+msgstr ""
+
+msgctxt "#30010"
+msgid "No supported players for this episode"
+msgstr ""
+
+msgctxt "#30011"
+msgid "Failed to get video"
+msgstr ""
+
+msgctxt "#30012"
+msgid "Network error"
+msgstr ""
+
+msgctxt "#30013"
+msgid "Episode"
+msgstr ""
+
+msgctxt "#30014"
+msgid "Choose translation"
+msgstr ""
+
+msgctxt "#30015"
+msgid "Clear search history"
+msgstr ""
+
+msgctxt "#30016"
+msgid "Enter anime title"
+msgstr ""
+
+msgctxt "#30017"
+msgid "Nothing found"
+msgstr ""
+
+msgctxt "#30018"
+msgid "Season"
+msgstr ""
+
+msgctxt "#30019"
+msgid "No episodes yet"
+msgstr ""
+
+msgctxt "#30020"
+msgid "Remove from history"
+msgstr ""
+
+msgctxt "#30100"
+msgid "General"
+msgstr ""
+
+msgctxt "#30101"
+msgid "Maximum quality"
+msgstr ""
+
+msgctxt "#30102"
+msgid "Preferred translation"
+msgstr ""
+
+msgctxt "#30103"
+msgid "Any"
+msgstr ""
+
+msgctxt "#30104"
+msgid "Voice-over"
+msgstr ""
+
+msgctxt "#30105"
+msgid "Subtitles"
+msgstr ""
+
+msgctxt "#30106"
+msgid "Remember chosen translation for each title"
+msgstr ""
+
+msgctxt "#30107"
+msgid "Show 18+ titles"
+msgstr ""
+
+msgctxt "#30108"
+msgid "Titles language"
+msgstr ""
+
+msgctxt "#30109"
+msgid "Russian"
+msgstr ""
+
+msgctxt "#30110"
+msgid "English / original"
+msgstr ""
+
+msgctxt "#30111"
+msgid "Network"
+msgstr ""
+
+msgctxt "#30112"
+msgid "API address"
+msgstr ""
+
+msgctxt "#30113"
+msgid "Site address (Referer)"
+msgstr ""
+
+msgctxt "#30114"
+msgid "AnimeLib player video server"
+msgstr ""
+
+msgctxt "#30115"
+msgid "Main"
+msgstr ""
+
+msgctxt "#30116"
+msgid "Backup 1"
+msgstr ""
+
+msgctxt "#30117"
+msgid "Backup 2"
+msgstr ""
+
+msgctxt "#30118"
+msgid "Best available"
+msgstr ""
+
+msgctxt "#30119"
+msgid "1080p"
+msgstr ""
+
+msgctxt "#30120"
+msgid "720p"
+msgstr ""
+
+msgctxt "#30121"
+msgid "480p"
+msgstr ""
+
+msgctxt "#30122"
+msgid "360p"
+msgstr ""
+

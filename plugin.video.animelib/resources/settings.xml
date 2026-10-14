@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings>
+    <category label="30100">
+        <setting id="max_quality" type="enum" label="30101" lvalues="30118|30119|30120|30121|30122" default="0"/>
+        <setting id="translation_type" type="enum" label="30102" lvalues="30103|30104|30105" default="1"/>
+        <setting id="remember_team" type="bool" label="30106" default="true"/>
+        <setting id="title_lang" type="enum" label="30108" lvalues="30109|30110" default="0"/>
+        <setting id="show_adult" type="bool" label="30107" default="false"/>
+    </category>
+    <category label="30111">
+        <setting id="api_url" type="text" label="30112" default="https://api.cdnlibs.org/api"/>
+        <setting id="site_url" type="text" label="30113" default="https://anilib.me"/>
+        <setting id="video_server" type="enum" label="30114" lvalues="30115|30116|30117" default="0"/>
+    </category>
+</settings>

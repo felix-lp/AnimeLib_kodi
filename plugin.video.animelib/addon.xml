@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.video.animelib" name="AnimeLib" version="1.0.0" provider-name="felix-lp">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="main.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="ru_RU">Аниме с AnimeLib (anilib.me)</summary>
+        <summary lang="en_GB">Anime from AnimeLib (anilib.me)</summary>
+        <description lang="ru_RU">Каталог, поиск и просмотр аниме с сайта AnimeLib. Видео воспроизводится через плеер Kodik или собственный плеер AnimeLib с выбором озвучки и качества.</description>
+        <description lang="en_GB">Browse, search and watch anime from AnimeLib. Video is played via the Kodik player or AnimeLib's own player with a choice of dub/sub team and quality.</description>
+        <language>ru</language>
+        <platform>all</platform>
+        <license>MIT</license>
+        <source>https://github.com/felix-lp/AnimeLib_kodi</source>
+        <website>https://anilib.me</website>
+        <disclaimer lang="ru_RU">Аддон не связан с AnimeLib. Весь контент предоставляется сторонними сайтами.</disclaimer>
+        <disclaimer lang="en_GB">This add-on is not affiliated with AnimeLib. All content is provided by third-party websites.</disclaimer>
+        <news>1.0.0: первая версия.</news>
+        <assets>
+            <icon>icon.png</icon>
+        </assets>
+    </extension>
+</addon>

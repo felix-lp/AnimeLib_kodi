@@ -107,8 +107,8 @@ class Library(object):
 
     def add(self, api, slug, title):
         """Creates/updates the title folder. Returns the number of new episodes."""
-        anime = api.anime(slug)
-        episodes = api.episodes(slug)
+        anime = api.anime(slug, anonymous=True)
+        episodes = api.episodes(slug, anonymous=True)
         entry = self.titles.get(slug)
         if entry:
             folder = entry['folder']

@@ -339,3 +339,11 @@ msgctxt "#30063"
 msgid "Colour titles by my list"
 msgstr ""
 
+msgctxt "#30064"
+msgid "Not available on AnimeLib (removed or restricted in your region)"
+msgstr ""
+
+msgctxt "#30065"
+msgid "AnimeLib: too many requests, try again in a minute"
+msgstr ""
+

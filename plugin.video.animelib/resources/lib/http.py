@@ -11,7 +11,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPCooki
 USER_AGENT = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
               '(KHTML, like Gecko) Chrome/124.0 Safari/537.36')
 TIMEOUT = 20
-RETRY_CODES = (502, 503, 504)
+RETRY_CODES = (429, 502, 503, 504)
 
 
 class HttpError(Exception):
@@ -98,7 +98,7 @@ def fetch(url, params=None, data=None, json_body=None, headers=None, method=None
             raise HttpError('%s: %s' % (e.reason, url))
         if result.code in RETRY_CODES and attempt < retries:
             attempt += 1
-            time.sleep(attempt)
+            time.sleep(2 * attempt if result.code == 429 else attempt)
             continue
         return result
 

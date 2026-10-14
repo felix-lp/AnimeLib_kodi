@@ -31,17 +31,26 @@ class AnimeLib(object):
             'Origin': self.site,
         }
 
-    def _headers(self, force_refresh=False):
+    def _headers(self, force_refresh=False, anonymous=False):
         headers = dict(self.headers)
+        if anonymous:
+            return headers
         token = self.token_provider(force_refresh) if self.token_provider else None
         if token:
             headers['Authorization'] = 'Bearer ' + token
         return headers
 
-    def _call(self, path, params=None, json_body=None, method=None):
+    def _call(self, path, params=None, json_body=None, method=None, anonymous=False):
+        """anonymous=True skips the token: logged-in requests share a quota of
+        100 requests/minute per account (HTTP 429 afterwards), anonymous ones do not.
+        If an anonymous request gets 404 (some titles are visible only to users),
+        it is repeated with the token."""
         url = self.api + path
         resp = http.fetch(url, params=params, json_body=json_body, method=method,
-                          headers=self._headers())
+                          headers=self._headers(anonymous=anonymous))
+        if anonymous and resp.code == 404 and self.token_provider:
+            resp = http.fetch(url, params=params, json_body=json_body, method=method,
+                              headers=self._headers())
         if resp.code == 401 and self.token_provider:
             resp = http.fetch(url, params=params, json_body=json_body, method=method,
                               headers=self._headers(force_refresh=True))
@@ -49,8 +58,8 @@ class AnimeLib(object):
             raise http.HttpError('HTTP %d: %s' % (resp.code, url), resp.code, resp.text)
         return resp.json() if resp.text.strip() else {}
 
-    def _get(self, path, params=None):
-        resp = self._call(path, params)
+    def _get(self, path, params=None, anonymous=False):
+        resp = self._call(path, params, anonymous=anonymous)
         return resp.get('data', resp) if isinstance(resp, dict) else resp
 
     def _get_raw(self, path, params=None):
@@ -136,11 +145,12 @@ class AnimeLib(object):
         return servers or DEFAULT_VIDEO_SERVERS
 
     # --- title -------------------------------------------------------------
-    def anime(self, slug_url):
-        return self._get('/anime/%s' % slug_url, [('fields[]', f) for f in ANIME_FIELDS])
+    def anime(self, slug_url, anonymous=False):
+        return self._get('/anime/%s' % slug_url, [('fields[]', f) for f in ANIME_FIELDS],
+                         anonymous=anonymous)
 
-    def episodes(self, slug_url):
-        return self._get('/episodes', {'anime_id': slug_url}) or []
+    def episodes(self, slug_url, anonymous=False):
+        return self._get('/episodes', {'anime_id': slug_url}, anonymous=anonymous) or []
 
     def episode(self, episode_id):
         return self._get('/episodes/%s' % episode_id)

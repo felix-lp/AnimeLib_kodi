@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl, urlencode
@@ -24,7 +25,8 @@ WATCHED_PERCENT = 85
 PLAYBACK_PROPERTY = 'plugin.video.animelib.playback'
 META_TTL = 14 * 24 * 3600
 META_CACHE_SIZE = 3000
-META_WORKERS = 10
+META_WORKERS = 6
+MISSING_TTL = 24 * 3600
 BOOKMARKS_TTL = 600
 LIBRARY_DEFAULT = 'special://profile/addon_data/plugin.video.animelib/library/'
 LIBRARY_UPDATE_HOURS = [0, 6, 12, 24]
@@ -100,6 +102,11 @@ class MetaCache(JsonStore):
         if entry and time.time() - entry.get('ts', 0) < META_TTL:
             return entry
         return None
+
+    def put_missing(self, slug):
+        """Title details not available (404): don't ask again for a day."""
+        self.data['items'][slug] = {'ts': time.time() - META_TTL + MISSING_TTL, 'missing': True}
+        self.dirty = True
 
     def put(self, slug, anime):
         self.data['items'][slug] = {
@@ -210,6 +217,8 @@ def make_api():
 
 class Account(JsonStore):
     """AnimeLib account: OAuth tokens, user info and credentials for silent re-login."""
+    _lock = threading.Lock()  # one refresh at a time (lists load details in threads)
+
     def __init__(self, site_url, api_url):
         JsonStore.__init__(self, 'account.json')
         self.site_url = site_url
@@ -234,6 +243,10 @@ class Account(JsonStore):
         self.save()
 
     def access_token(self, force_refresh=False):
+        with self._lock:
+            return self._access_token(force_refresh)
+
+    def _access_token(self, force_refresh=False):
         token = self.data.get('token')
         if not token:
             return None
@@ -346,15 +359,19 @@ class Plugin(object):
                 continue
             cached = self.meta.get(slug)
             if cached:
-                result[slug] = cached
+                if not cached.get('missing'):
+                    result[slug] = cached
             else:
                 missing.append(slug)
 
         def fetch(slug):
             try:
-                return slug, self.api.anime(slug)
+                return slug, self.api.anime(slug, anonymous=True)
             except http.HttpError as e:
-                log('Cannot load %s: %s' % (slug, e), xbmc.LOGWARNING)
+                if e.code == 404:
+                    self.meta.put_missing(slug)
+                else:
+                    log('Cannot load %s: %s' % (slug, e), xbmc.LOGWARNING)
                 return slug, None
 
         if missing:
@@ -406,7 +423,13 @@ class Plugin(object):
             handler()
         except (http.HttpError, kodik.KodikError, auth.AuthError, ValueError) as e:
             log('Error in %s: %s' % (action, e), xbmc.LOGERROR)
-            notify('%s: %s' % (L(30012), e), error=True)
+            code = getattr(e, 'code', None)
+            if code == 404:
+                notify(L(30064), error=True)
+            elif code == 429:
+                notify(L(30065), error=True)
+            else:
+                notify('%s: %s' % (L(30012), e), error=True)
             if action == 'play':
                 xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
             elif action not in NON_DIRECTORY_ACTIONS:

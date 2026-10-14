@@ -67,9 +67,39 @@ class Tracker(xbmc.Player):
             plugin.mark_watched(data)
 
 
+LIBRARY_FIRST_DELAY = 120  # seconds after Kodi start
+
+
+def update_library(force=False):
+    """Adds new episodes of library titles every N hours (setting)."""
+    hours = plugin.LIBRARY_UPDATE_HOURS[min(plugin.setting_int('library_update_hours', 2),
+                                            len(plugin.LIBRARY_UPDATE_HOURS) - 1)]
+    lib = plugin.make_library()
+    if not lib.titles or (not hours and not force):
+        return
+    last = lib.store.data.get('last_update', 0)
+    if not force and time.time() - last < hours * 3600:
+        return
+    lib.store.data['last_update'] = time.time()
+    lib.store.save()
+    _, api = plugin.make_api()
+    added = lib.update_all(api, plugin.log)
+    plugin.log('Library update: %d new episodes' % added)
+    if added:
+        xbmc.executebuiltin('UpdateLibrary(video)')
+
+
 def run():
     monitor = xbmc.Monitor()
     tracker = Tracker()
+    started = time.time()
+    next_library_check = started + LIBRARY_FIRST_DELAY
     while not monitor.waitForAbort(1):
         tracker.tick()
+        if time.time() >= next_library_check and not tracker.isPlayingVideo():
+            next_library_check = time.time() + 600
+            try:
+                update_library()
+            except Exception as e:  # never let the service die
+                plugin.log('Library update error: %s' % e, xbmc.LOGWARNING)
     del tracker

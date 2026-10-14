@@ -13,7 +13,7 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from . import animelib, auth, http, kodik, players
+from . import animelib, auth, http, kodik, library, players
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -25,9 +25,13 @@ PLAYBACK_PROPERTY = 'plugin.video.animelib.playback'
 META_TTL = 14 * 24 * 3600
 META_CACHE_SIZE = 3000
 META_WORKERS = 10
+BOOKMARKS_TTL = 600
+LIBRARY_DEFAULT = 'special://profile/addon_data/plugin.video.animelib/library/'
+LIBRARY_UPDATE_HOURS = [0, 6, 12, 24]
 SEARCH_HISTORY_SIZE = 20
 NON_DIRECTORY_ACTIONS = ('new_search', 'forget_search', 'clear_search', 'login', 'logout',
-                         'bookmark_add', 'bookmark_remove')
+                         'bookmark_add', 'bookmark_remove', 'library_add', 'library_remove',
+                         'library_add_folder', 'library_update', 'library_help')
 
 
 def L(string_id):
@@ -117,6 +121,91 @@ class MetaCache(JsonStore):
             self.data['items'] = {k: items[k] for k in keep}
         JsonStore.save(self)
         self.dirty = False
+
+
+class BookmarkMap(JsonStore):
+    """slug -> list (folder) id for the logged-in user, used to colour titles.
+    The catalog API does not say which list a title is in, so all bookmarks are
+    fetched (one request per page of every folder) and kept for BOOKMARKS_TTL."""
+    def __init__(self):
+        JsonStore.__init__(self, 'bookmarks.json', {'map': {}, 'folders': {}})
+
+    def load(self, api, user_id, force=False):
+        fresh = (self.data.get('user') == user_id
+                 and time.time() - self.data.get('ts', 0) < BOOKMARKS_TTL)
+        if fresh and not force:
+            return self
+        folders = api.bookmark_folders(user_id)
+
+        def fetch(folder):
+            slugs, page = [], 1
+            while True:
+                items, has_next = api.bookmarks(user_id, folder['id'], page)
+                slugs += [b['media']['slug_url'] for b in items if b.get('media')]
+                if not has_next:
+                    return folder['id'], slugs
+                page += 1
+
+        mapping = {}
+        with ThreadPoolExecutor(max(1, min(META_WORKERS, len(folders)))) as pool:
+            for folder_id, slugs in pool.map(fetch, folders):
+                for slug in slugs:
+                    mapping[slug] = folder_id
+        self.data = {
+            'user': user_id, 'ts': time.time(), 'map': mapping,
+            'folders': {str(f['id']): {'name': f.get('name'), 'color': f.get('color')} for f in folders},
+        }
+        self.save()
+        return self
+
+    def status(self, slug):
+        """Returns (name, colour 'RRGGBB') of the list containing the title, or None."""
+        folder_id = self.data['map'].get(slug)
+        folder = self.data['folders'].get(str(folder_id)) if folder_id is not None else None
+        if not folder:
+            return None
+        return folder.get('name'), (folder.get('color') or '#ffffff').lstrip('#')
+
+    def set(self, slug, folder_id):
+        if folder_id is None:
+            self.data['map'].pop(slug, None)
+        else:
+            self.data['map'][slug] = folder_id
+        self.save()
+
+
+def colored(text, rrggbb):
+    return '[COLOR FF%s]%s[/COLOR]' % (rrggbb.upper(), text)
+
+
+def make_library():
+    root = ADDON.getSetting('library_path') or LIBRARY_DEFAULT
+    site = (ADDON.getSetting('site_url') or 'https://anilib.me').rstrip('/') + '/'
+    return library.Library(root, JsonStore('library.json'), site)
+
+
+def library_source_configured(root):
+    """Checks via JSON-RPC whether the library folder was added as a video source."""
+    try:
+        resp = json.loads(xbmc.executeJSONRPC(json.dumps({
+            'jsonrpc': '2.0', 'id': 1, 'method': 'Files.GetSources', 'params': {'media': 'video'}})))
+        sources = resp.get('result', {}).get('sources') or []
+    except (ValueError, AttributeError):
+        return True
+    target = xbmcvfs.translatePath(root).rstrip('/\\').lower()
+    for src in sources:
+        path = xbmcvfs.translatePath(src.get('file') or '').rstrip('/\\').lower()
+        if path and (target == path or target.startswith(path + '/') or target.startswith(path + '\\')):
+            return True
+    return False
+
+
+def make_api():
+    addon = xbmcaddon.Addon()  # fresh instance: may run inside the long-lived service
+    api_url = addon.getSetting('api_url') or animelib.DEFAULT_API
+    site_url = addon.getSetting('site_url') or 'https://anilib.me'
+    account = Account(site_url, api_url)
+    return account, animelib.AnimeLib(api_url, site_url, token_provider=account.access_token)
 
 
 class Account(JsonStore):
@@ -276,6 +365,16 @@ class Plugin(object):
             self.meta.save()
         return result
 
+    def bookmark_map(self):
+        """BookmarkMap for colouring, or None when not logged in / disabled / failed."""
+        if not (self.account.logged_in and self.account.user.get('id') and setting_bool('color_lists')):
+            return None
+        try:
+            return BookmarkMap().load(self.api, self.account.user['id'])
+        except http.HttpError as e:
+            log('Cannot load bookmarks: %s' % e, xbmc.LOGWARNING)
+            return None
+
     @property
     def state(self):
         if self._state is None:
@@ -413,9 +512,14 @@ class Plugin(object):
         if not self._require_login():
             return xbmcplugin.endOfDirectory(self.handle, succeeded=False)
         for folder in self.api.bookmark_folders(self.account.user['id']):
-            label = '%s [COLOR grey](%d)[/COLOR]' % (folder.get('name'), folder.get('count') or 0)
+            name = folder.get('name') or ''
+            if folder.get('color'):
+                name = colored(name, folder['color'].lstrip('#'))
+            label = '%s [COLOR grey](%d)[/COLOR]' % (name, folder.get('count') or 0)
             self.add_dir(label, self.url(action='bookmarks', folder=folder['id']),
-                         {'icon': 'DefaultPlaylist.png'})
+                         {'icon': 'DefaultPlaylist.png'},
+                         context=[(L(30049), 'RunPlugin(%s)' % self.url(action='library_add_folder',
+                                                                        folder=folder['id']))])
         li = make_item('[COLOR grey]%s[/COLOR]' % L(30035), {'icon': 'DefaultUser.png'})
         xbmcplugin.addDirectoryItem(self.handle, self.url(action='logout'), li, isFolder=False)
         self.end(cache=False)
@@ -428,8 +532,9 @@ class Plugin(object):
         items, has_next = self.api.bookmarks(self.account.user['id'], folder, page)
         medias = [bm['media'] for bm in items if bm.get('media')]
         meta = self.load_meta(medias)
+        bookmarks, lib = self.bookmark_map(), make_library()
         for media in medias:
-            self.add_anime(media, meta.get(media.get('slug_url')))
+            self.add_anime(media, meta.get(media.get('slug_url')), bookmarks, lib)
         if has_next:
             self.add_dir('[COLOR yellow]%s (%d) >>[/COLOR]' % (L(30008), page + 1),
                          self.url(action='bookmarks', folder=folder, page=page + 1))
@@ -445,6 +550,7 @@ class Plugin(object):
             return
         current = self.api.media_bookmark(slug) or {}
         self.api.set_bookmark(slug, folders[idx]['id'], item_id=current.get('item_id'))
+        BookmarkMap().set(slug, folders[idx]['id'])
         notify(L(30033).replace('%s', folders[idx].get('name') or ''))
         xbmc.executebuiltin('Container.Refresh')
 
@@ -454,15 +560,91 @@ class Plugin(object):
         current = self.api.media_bookmark(self.params['slug'])
         if current and current.get('id'):
             self.api.delete_bookmark(current['id'])
+        BookmarkMap().set(self.params['slug'], None)
         notify(L(30034))
         xbmc.executebuiltin('Container.Refresh')
+
+    # --- Kodi library --------------------------------------------------------------
+    def _library_title(self, slug):
+        return self.params.get('title') or self._title(self.api.anime(slug))
+
+    def _after_library_change(self, lib):
+        if not library_source_configured(lib.root):
+            self.do_library_help()
+        else:
+            xbmc.executebuiltin('UpdateLibrary(video)')
+
+    def do_library_add(self):
+        slug = self.params['slug']
+        lib = make_library()
+        xbmc.executebuiltin('ActivateWindow(busydialognocancel)')
+        try:
+            count = lib.add(self.api, slug, self._library_title(slug))
+        finally:
+            xbmc.executebuiltin('Dialog.Close(busydialognocancel)')
+        notify(L(30050).replace('%d', str(count)))
+        self._after_library_change(lib)
+        xbmc.executebuiltin('Container.Refresh')
+
+    def do_library_remove(self):
+        lib = make_library()
+        if lib.remove(self.params['slug']):
+            notify(L(30051))
+            xbmc.executebuiltin('CleanLibrary(video)')
+            xbmc.executebuiltin('Container.Refresh')
+
+    def do_library_add_folder(self):
+        if not self._require_login():
+            return
+        folder, page, medias = self.params['folder'], 1, []
+        while True:
+            items, has_next = self.api.bookmarks(self.account.user['id'], folder, page)
+            medias += [b['media'] for b in items if b.get('media')]
+            if not has_next:
+                break
+            page += 1
+        lib = make_library()
+        progress = xbmcgui.DialogProgress()
+        progress.create('AnimeLib', L(30052))
+        added = 0
+        try:
+            for i, media in enumerate(medias):
+                if progress.iscanceled():
+                    break
+                title = self._title(media)
+                progress.update(int(i * 100 / max(1, len(medias))), title)
+                try:
+                    lib.add(self.api, media['slug_url'], title)
+                    added += 1
+                except http.HttpError as e:
+                    log('Library add failed for %s: %s' % (media.get('slug_url'), e), xbmc.LOGWARNING)
+        finally:
+            progress.close()
+        notify(L(30053).replace('%d', str(added)))
+        self._after_library_change(lib)
+
+    def do_library_update(self):
+        lib = make_library()
+        xbmc.executebuiltin('ActivateWindow(busydialognocancel)')
+        try:
+            count = lib.update_all(self.api, log)
+        finally:
+            xbmc.executebuiltin('Dialog.Close(busydialognocancel)')
+        notify(L(30050).replace('%d', str(count)))
+        if count:
+            xbmc.executebuiltin('UpdateLibrary(video)')
+
+    def do_library_help(self):
+        root = (ADDON.getSetting('library_path') or LIBRARY_DEFAULT)
+        xbmcgui.Dialog().textviewer(L(30054), L(30055).replace('%s', xbmcvfs.translatePath(root)))
 
     # --- catalog -----------------------------------------------------------------
     def _title(self, item):
         return animelib.title_of(item, 'eng' if setting_int('title_lang') == 1 else 'rus')
 
-    def add_anime(self, item, meta=None):
+    def add_anime(self, item, meta=None, bookmarks=None, lib=None):
         meta = meta or {}
+        slug = item['slug_url']
         cover = item.get('cover') or {}
         title = self._title(item)
         summary_line = ' · '.join(x for x in (
@@ -471,6 +653,11 @@ class Plugin(object):
             item.get('releaseDateString'),
             (item.get('ageRestriction') or {}).get('label'),
         ) if x)
+        label = title
+        status = bookmarks.status(slug) if bookmarks else None
+        if status:
+            label = colored(title, status[1])
+            summary_line = colored('● ' + status[0], status[1]) + (' · ' + summary_line if summary_line else '')
         plot = '\n\n'.join(x for x in (summary_line, meta.get('plot')) if x)
         info = {
             'title': title,
@@ -489,11 +676,15 @@ class Plugin(object):
         art = {'thumb': poster, 'poster': poster, 'icon': cover.get('thumbnail'),
                'fanart': meta.get('fanart')}
         context = []
+        if lib is not None and lib.contains(slug):
+            context.append((L(30048), 'RunPlugin(%s)' % self.url(action='library_remove', slug=slug)))
+        else:
+            context.append((L(30047), 'RunPlugin(%s)' % self.url(action='library_add', slug=slug,
+                                                                  title=title)))
         if self.account.logged_in:
-            slug = item['slug_url']
             context.append((L(30031), 'RunPlugin(%s)' % self.url(action='bookmark_add', slug=slug)))
             context.append((L(30032), 'RunPlugin(%s)' % self.url(action='bookmark_remove', slug=slug)))
-        self.add_dir(title, self.url(action='anime', slug=item['slug_url']), art, info, context)
+        self.add_dir(label, self.url(action='anime', slug=slug), art, info, context)
 
     def do_catalog(self):
         page = int(self.params.get('page', 1))
@@ -507,8 +698,9 @@ class Plugin(object):
         if not setting_bool('show_adult'):
             items = [i for i in items if not animelib.is_adult(i)]
         meta = self.load_meta(items)
+        bookmarks, lib = self.bookmark_map(), make_library()
         for item in items:
-            self.add_anime(item, meta.get(item.get('slug_url')))
+            self.add_anime(item, meta.get(item.get('slug_url')), bookmarks, lib)
         count = len(items)
         if has_next:
             self.add_dir('[COLOR yellow]%s (%d) >>[/COLOR]' % (L(30008), page + 1),
@@ -705,13 +897,9 @@ def mark_watched(data):
     """Called by the service once WATCHED_PERCENT of the episode is played. Same as the site:
     mark the player as viewed and move the list bookmark to this episode (only for titles
     that are already in one of the user's lists)."""
-    addon = xbmcaddon.Addon()  # fresh instance: the service runs for the whole Kodi session
-    api_url = addon.getSetting('api_url') or animelib.DEFAULT_API
-    site_url = addon.getSetting('site_url') or 'https://anilib.me'
-    account = Account(site_url, api_url)
+    account, api = make_api()
     if not account.logged_in:
         return
-    api = animelib.AnimeLib(api_url, site_url, token_provider=account.access_token)
     try:
         api.mark_viewed(data['anime_id'], data['player_id'])
         current = api.media_bookmark(data['slug'])

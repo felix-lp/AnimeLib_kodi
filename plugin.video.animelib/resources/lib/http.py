@@ -119,6 +119,20 @@ def probe(url, headers=None, timeout=8):
     return resp.status
 
 
+def download(url, headers=None, timeout=TIMEOUT):
+    """Returns the raw response body (for images)."""
+    hdrs = {'User-Agent': USER_AGENT}
+    if headers:
+        hdrs.update(headers)
+    try:
+        with _default_opener.open(Request(url, headers=hdrs), timeout=timeout) as resp:
+            return resp.read()
+    except HTTPError as e:
+        raise HttpError('HTTP %d: %s' % (e.code, url), e.code)
+    except (URLError, OSError) as e:
+        raise HttpError('%s: %s' % (getattr(e, 'reason', e), url))
+
+
 def request(url, params=None, data=None, headers=None, **kwargs):
     resp = fetch(url, params=params, data=data, headers=headers, **kwargs)
     if resp.code >= 400:

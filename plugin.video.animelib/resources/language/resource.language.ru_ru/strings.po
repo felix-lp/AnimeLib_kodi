@@ -267,3 +267,75 @@ msgctxt "#30045"
 msgid "Show descriptions in title lists (loads slower the first time)"
 msgstr "Показывать описания в списках тайтлов (первая загрузка дольше)"
 
+msgctxt "#30046"
+msgid "Kodi library"
+msgstr "Медиатека"
+
+msgctxt "#30047"
+msgid "Add to Kodi library"
+msgstr "Добавить в медиатеку Kodi"
+
+msgctxt "#30048"
+msgid "Remove from Kodi library"
+msgstr "Удалить из медиатеки Kodi"
+
+msgctxt "#30049"
+msgid "Add whole list to Kodi library"
+msgstr "Добавить весь список в медиатеку Kodi"
+
+msgctxt "#30050"
+msgid "Library: %d new episodes"
+msgstr "Медиатека: новых эпизодов — %d"
+
+msgctxt "#30051"
+msgid "Removed from Kodi library"
+msgstr "Удалено из медиатеки"
+
+msgctxt "#30052"
+msgid "Adding to Kodi library..."
+msgstr "Добавление в медиатеку..."
+
+msgctxt "#30053"
+msgid "Titles added to library: %d"
+msgstr "Добавлено в медиатеку тайтлов: %d"
+
+msgctxt "#30054"
+msgid "How to connect the library"
+msgstr "Как подключить медиатеку"
+
+msgctxt "#30055"
+msgid "The library folder has to be added to Kodi once:[CR][CR]1. Videos > Files > Add videos... > Browse.[CR]2. Choose the folder:[CR]%s[CR](in Browse: Profile directory > addon_data > plugin.video.animelib > library)[CR]3. OK, then set \"This directory contains\" to TV shows and the information provider to \"Local information only\".[CR]4. Confirm refreshing information.[CR][CR]Anime will then appear under TV shows, and the add-on will add new episodes by itself."
+msgstr "Папку медиатеки нужно один раз подключить в Kodi:[CR][CR]1. Видео > Файлы > Добавить видео... > Обзор.[CR]2. Выберите папку:[CR]%s[CR](в «Обзоре»: Папка профиля > addon_data > plugin.video.animelib > library)[CR]3. OK, затем в «Этот каталог содержит» выберите «Сериалы», а источник информации — «Local information only» (только локальная информация).[CR]4. Согласитесь обновить информацию.[CR][CR]После этого аниме появится в разделе «Сериалы», а новые эпизоды аддон будет добавлять сам."
+
+msgctxt "#30056"
+msgid "Library folder"
+msgstr "Папка медиатеки"
+
+msgctxt "#30057"
+msgid "Auto-update library (new episodes)"
+msgstr "Автообновление медиатеки (новые эпизоды)"
+
+msgctxt "#30058"
+msgid "Off"
+msgstr "Выключено"
+
+msgctxt "#30059"
+msgid "Every 6 hours"
+msgstr "Каждые 6 часов"
+
+msgctxt "#30060"
+msgid "Every 12 hours"
+msgstr "Каждые 12 часов"
+
+msgctxt "#30061"
+msgid "Once a day"
+msgstr "Раз в сутки"
+
+msgctxt "#30062"
+msgid "Update library now"
+msgstr "Обновить медиатеку сейчас"
+
+msgctxt "#30063"
+msgid "Colour titles by my list"
+msgstr "Подсвечивать тайтлы цветом моего списка"
+

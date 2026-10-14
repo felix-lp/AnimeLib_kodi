@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.animelib" name="AnimeLib" version="1.4.0" provider-name="felix-lp">
+<addon id="plugin.video.animelib" name="AnimeLib" version="1.5.0" provider-name="felix-lp">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
     </requires>
@@ -19,7 +19,8 @@
         <website>https://anilib.me</website>
         <disclaimer lang="ru_RU">Аддон не связан с AnimeLib. Весь контент предоставляется сторонними сайтами.</disclaimer>
         <disclaimer lang="en_GB">This add-on is not affiliated with AnimeLib. All content is provided by third-party websites.</disclaimer>
-        <news>1.4.0: описание, жанры и фон тайтла видны прямо в каталоге и списках (кэшируются на 2 недели).
+        <news>1.5.0: добавление аниме в медиатеку Kodi (по одному или целым списком, новые эпизоды добавляются автоматически); тайтлы из ваших списков подсвечиваются цветом списка.
+1.4.0: описание, жанры и фон тайтла видны прямо в каталоге и списках (кэшируются на 2 недели).
 1.3.0: исправлено падение Kodi при остановке видео (отслеживание просмотра перенесено в фоновый сервис); если видеосервер отвечает ошибкой, аддон сам переключается на рабочий.
 1.2.1: исправлены постеры (CDN обложек требует Referer).
 1.2.0: просмотренные эпизоды отмечаются на сайте при 85% (как на сайте), пропуск опенинга, видеосервер выбирается автоматически, качество по умолчанию 1080p.

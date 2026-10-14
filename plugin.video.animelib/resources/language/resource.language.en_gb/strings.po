@@ -267,3 +267,75 @@ msgctxt "#30045"
 msgid "Show descriptions in title lists (loads slower the first time)"
 msgstr ""
 
+msgctxt "#30046"
+msgid "Kodi library"
+msgstr ""
+
+msgctxt "#30047"
+msgid "Add to Kodi library"
+msgstr ""
+
+msgctxt "#30048"
+msgid "Remove from Kodi library"
+msgstr ""
+
+msgctxt "#30049"
+msgid "Add whole list to Kodi library"
+msgstr ""
+
+msgctxt "#30050"
+msgid "Library: %d new episodes"
+msgstr ""
+
+msgctxt "#30051"
+msgid "Removed from Kodi library"
+msgstr ""
+
+msgctxt "#30052"
+msgid "Adding to Kodi library..."
+msgstr ""
+
+msgctxt "#30053"
+msgid "Titles added to library: %d"
+msgstr ""
+
+msgctxt "#30054"
+msgid "How to connect the library"
+msgstr ""
+
+msgctxt "#30055"
+msgid "The library folder has to be added to Kodi once:[CR][CR]1. Videos > Files > Add videos... > Browse.[CR]2. Choose the folder:[CR]%s[CR](in Browse: Profile directory > addon_data > plugin.video.animelib > library)[CR]3. OK, then set \"This directory contains\" to TV shows and the information provider to \"Local information only\".[CR]4. Confirm refreshing information.[CR][CR]Anime will then appear under TV shows, and the add-on will add new episodes by itself."
+msgstr ""
+
+msgctxt "#30056"
+msgid "Library folder"
+msgstr ""
+
+msgctxt "#30057"
+msgid "Auto-update library (new episodes)"
+msgstr ""
+
+msgctxt "#30058"
+msgid "Off"
+msgstr ""
+
+msgctxt "#30059"
+msgid "Every 6 hours"
+msgstr ""
+
+msgctxt "#30060"
+msgid "Every 12 hours"
+msgstr ""
+
+msgctxt "#30061"
+msgid "Once a day"
+msgstr ""
+
+msgctxt "#30062"
+msgid "Update library now"
+msgstr ""
+
+msgctxt "#30063"
+msgid "Colour titles by my list"
+msgstr ""
+

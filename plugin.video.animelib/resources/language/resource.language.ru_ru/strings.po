@@ -263,3 +263,7 @@ msgctxt "#30044"
 msgid "Auto (as on the site)"
 msgstr "Авто (как на сайте)"
 
+msgctxt "#30045"
+msgid "Show descriptions in title lists (loads slower the first time)"
+msgstr "Показывать описания в списках тайтлов (первая загрузка дольше)"
+

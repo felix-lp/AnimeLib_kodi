@@ -5,6 +5,7 @@
         <setting id="translation_type" type="enum" label="30102" lvalues="30103|30104|30105" default="1"/>
         <setting id="remember_team" type="bool" label="30106" default="true"/>
         <setting id="skip_opening" type="bool" label="30043" default="false"/>
+        <setting id="list_details" type="bool" label="30045" default="true"/>
         <setting id="title_lang" type="enum" label="30108" lvalues="30109|30110" default="0"/>
         <setting id="show_adult" type="bool" label="30107" default="false"/>
     </category>

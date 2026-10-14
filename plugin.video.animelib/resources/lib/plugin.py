@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl, urlencode
 
 import xbmc
@@ -21,6 +22,9 @@ QUALITIES = [0, 1080, 720, 480, 360]
 VIDEO_SERVERS = [None, 'main', 'secondary_1', 'secondary_2']  # None = as the site (player.video_domain)
 WATCHED_PERCENT = 85
 PLAYBACK_PROPERTY = 'plugin.video.animelib.playback'
+META_TTL = 14 * 24 * 3600
+META_CACHE_SIZE = 3000
+META_WORKERS = 10
 SEARCH_HISTORY_SIZE = 20
 NON_DIRECTORY_ACTIONS = ('new_search', 'forget_search', 'clear_search', 'login', 'logout',
                          'bookmark_add', 'bookmark_remove')
@@ -78,6 +82,41 @@ class State(JsonStore):
     """Search history and chosen translations."""
     def __init__(self):
         JsonStore.__init__(self, 'state.json', {'search': [], 'teams': {}})
+
+
+class MetaCache(JsonStore):
+    """Title descriptions for list views: the catalog API does not return them,
+    so they are fetched per title once and kept for META_TTL."""
+    def __init__(self):
+        JsonStore.__init__(self, 'meta.json', {'items': {}})
+        self.dirty = False
+
+    def get(self, slug):
+        entry = self.data['items'].get(slug)
+        if entry and time.time() - entry.get('ts', 0) < META_TTL:
+            return entry
+        return None
+
+    def put(self, slug, anime):
+        self.data['items'][slug] = {
+            'ts': time.time(),
+            'plot': animelib.summary_text(anime.get('summary')),
+            'genres': [g.get('name') for g in anime.get('genres') or [] if g.get('name')],
+            'fanart': (anime.get('background') or {}).get('url'),
+            'premiered': anime.get('releaseDate'),
+        }
+        self.dirty = True
+        return self.data['items'][slug]
+
+    def save(self):
+        if not self.dirty:
+            return
+        items = self.data['items']
+        if len(items) > META_CACHE_SIZE:
+            keep = sorted(items, key=lambda k: items[k].get('ts', 0))[-META_CACHE_SIZE:]
+            self.data['items'] = {k: items[k] for k in keep}
+        JsonStore.save(self)
+        self.dirty = False
 
 
 class Account(JsonStore):
@@ -199,6 +238,43 @@ class Plugin(object):
         self.account = Account(site_url, api_url)
         self.api = animelib.AnimeLib(api_url, site_url, token_provider=self.account.access_token)
         self._state = None
+        self._meta = None
+
+    @property
+    def meta(self):
+        if self._meta is None:
+            self._meta = MetaCache()
+        return self._meta
+
+    def load_meta(self, items):
+        """Returns {slug: meta} for list items, fetching missing ones in parallel."""
+        if not setting_bool('list_details'):
+            return {}
+        result, missing = {}, []
+        for item in items:
+            slug = item.get('slug_url')
+            if not slug:
+                continue
+            cached = self.meta.get(slug)
+            if cached:
+                result[slug] = cached
+            else:
+                missing.append(slug)
+
+        def fetch(slug):
+            try:
+                return slug, self.api.anime(slug)
+            except http.HttpError as e:
+                log('Cannot load %s: %s' % (slug, e), xbmc.LOGWARNING)
+                return slug, None
+
+        if missing:
+            with ThreadPoolExecutor(min(META_WORKERS, len(missing))) as pool:
+                for slug, anime in pool.map(fetch, missing):
+                    if anime:
+                        result[slug] = self.meta.put(slug, anime)
+            self.meta.save()
+        return result
 
     @property
     def state(self):
@@ -350,10 +426,10 @@ class Plugin(object):
         page = int(self.params.get('page', 1))
         folder = self.params['folder']
         items, has_next = self.api.bookmarks(self.account.user['id'], folder, page)
-        for bm in items:
-            media = bm.get('media')
-            if media:
-                self.add_anime(media, in_folder=True)
+        medias = [bm['media'] for bm in items if bm.get('media')]
+        meta = self.load_meta(medias)
+        for media in medias:
+            self.add_anime(media, meta.get(media.get('slug_url')))
         if has_next:
             self.add_dir('[COLOR yellow]%s (%d) >>[/COLOR]' % (L(30008), page + 1),
                          self.url(action='bookmarks', folder=folder, page=page + 1))
@@ -385,28 +461,33 @@ class Plugin(object):
     def _title(self, item):
         return animelib.title_of(item, 'eng' if setting_int('title_lang') == 1 else 'rus')
 
-    def add_anime(self, item, in_folder=False):
+    def add_anime(self, item, meta=None):
+        meta = meta or {}
         cover = item.get('cover') or {}
         title = self._title(item)
-        plot = ' · '.join(x for x in (
+        summary_line = ' · '.join(x for x in (
             (item.get('type') or {}).get('label'),
             (item.get('status') or {}).get('label'),
             item.get('releaseDateString'),
             (item.get('ageRestriction') or {}).get('label'),
         ) if x)
+        plot = '\n\n'.join(x for x in (summary_line, meta.get('plot')) if x)
         info = {
             'title': title,
             'originaltitle': item.get('name'),
             'plot': plot,
             'rating': animelib.rating_of(item),
+            'genre': meta.get('genres'),
             'mediatype': 'tvshow',
         }
-        year = (item.get('releaseDate') or '')[:4]
-        if year.isdigit():
-            info['year'] = int(year)
-        art = {'thumb': cover.get('default') or cover.get('thumbnail'),
-               'poster': cover.get('default') or cover.get('thumbnail'),
-               'icon': cover.get('thumbnail')}
+        date = item.get('releaseDate') or meta.get('premiered') or ''
+        if date[:4].isdigit():
+            info['year'] = int(date[:4])
+        if len(date) == 10:
+            info['premiered'] = date
+        poster = cover.get('default') or cover.get('thumbnail')
+        art = {'thumb': poster, 'poster': poster, 'icon': cover.get('thumbnail'),
+               'fanart': meta.get('fanart')}
         context = []
         if self.account.logged_in:
             slug = item['slug_url']
@@ -423,13 +504,12 @@ class Plugin(object):
         items, has_next = self.api.catalog(page=page, query=query, sort_by=sort_by,
                                            genres=[genre] if genre else None,
                                            types=[type_id] if type_id else None)
-        show_adult = setting_bool('show_adult')
-        count = 0
+        if not setting_bool('show_adult'):
+            items = [i for i in items if not animelib.is_adult(i)]
+        meta = self.load_meta(items)
         for item in items:
-            if not show_adult and animelib.is_adult(item):
-                continue
-            count += 1
-            self.add_anime(item)
+            self.add_anime(item, meta.get(item.get('slug_url')))
+        count = len(items)
         if has_next:
             self.add_dir('[COLOR yellow]%s (%d) >>[/COLOR]' % (L(30008), page + 1),
                          self.url(action='catalog', q=query, sort_by=sort_by, genre=genre,
@@ -442,6 +522,8 @@ class Plugin(object):
     def do_anime(self):
         slug = self.params['slug']
         anime = self.api.anime(slug)
+        self.meta.put(slug, anime)
+        self.meta.save()
         episodes = self.api.episodes(slug)
         if not episodes:
             notify(L(30019))

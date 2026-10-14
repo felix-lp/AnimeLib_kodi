@@ -168,10 +168,18 @@ def set_info(li, info):
         li.setInfo('video', info)
 
 
+def image_url(url):
+    """The cover CDN answers 403 without a Referer; Kodi passes headers after '|'."""
+    if not url or not url.startswith('http') or '|' in url:
+        return url
+    site = (ADDON.getSetting('site_url') or 'https://anilib.me').rstrip('/') + '/'
+    return '%s|%s' % (url, urlencode({'Referer': site, 'User-Agent': http.USER_AGENT}))
+
+
 def make_item(label, art=None, info=None, playable=False):
     li = xbmcgui.ListItem(label=label, offscreen=True)
     if art:
-        li.setArt(art)
+        li.setArt({k: image_url(v) for k, v in art.items() if v})
     if info:
         set_info(li, info)
     if playable:

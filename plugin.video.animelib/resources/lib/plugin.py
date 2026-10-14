@@ -11,7 +11,7 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from . import animelib, http, kodik, players
+from . import animelib, auth, http, kodik, players
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -19,6 +19,8 @@ ICON = ADDON.getAddonInfo('icon')
 QUALITIES = [0, 1080, 720, 480, 360]
 VIDEO_SERVERS = ['main', 'secondary_1', 'secondary_2']
 SEARCH_HISTORY_SIZE = 20
+NON_DIRECTORY_ACTIONS = ('new_search', 'forget_search', 'clear_search', 'login', 'logout',
+                         'bookmark_add', 'bookmark_remove')
 
 
 def L(string_id):
@@ -46,27 +48,90 @@ def notify(msg, error=False):
                                   5000)
 
 
-# --- persistent state (search history, chosen translations) -------------------
-class State(object):
-    def __init__(self):
+# --- persistent state ------------------------------------------------------------
+class JsonStore(object):
+    def __init__(self, filename, defaults=None):
         folder = xbmcvfs.translatePath(ADDON.getAddonInfo('profile'))
         if not xbmcvfs.exists(folder):
             xbmcvfs.mkdirs(folder)
-        self.path = os.path.join(folder, 'state.json')
+        self.path = os.path.join(folder, filename)
         try:
             with open(self.path, 'r', encoding='utf-8') as f:
                 self.data = json.load(f)
         except (IOError, OSError, ValueError):
             self.data = {}
-        self.data.setdefault('search', [])
-        self.data.setdefault('teams', {})
+        for key, value in (defaults or {}).items():
+            self.data.setdefault(key, value)
 
     def save(self):
         try:
             with open(self.path, 'w', encoding='utf-8') as f:
                 json.dump(self.data, f, ensure_ascii=False)
         except (IOError, OSError) as e:
-            log('Cannot save state: %s' % e, xbmc.LOGWARNING)
+            log('Cannot save %s: %s' % (self.path, e), xbmc.LOGWARNING)
+
+
+class State(JsonStore):
+    """Search history and chosen translations."""
+    def __init__(self):
+        JsonStore.__init__(self, 'state.json', {'search': [], 'teams': {}})
+
+
+class Account(JsonStore):
+    """AnimeLib account: OAuth tokens, user info and credentials for silent re-login."""
+    def __init__(self, site_url, api_url):
+        JsonStore.__init__(self, 'account.json')
+        self.site_url = site_url
+        self.api_url = api_url
+
+    @property
+    def logged_in(self):
+        return bool(self.data.get('token'))
+
+    @property
+    def user(self):
+        return self.data.get('user') or {}
+
+    def login(self, username, password):
+        self.data['token'] = auth.login(username, password, self.site_url, self.api_url)
+        self.data['login'] = username
+        self.data['password'] = password
+        self.save()
+
+    def logout(self):
+        self.data = {}
+        self.save()
+
+    def access_token(self, force_refresh=False):
+        token = self.data.get('token')
+        if not token:
+            return None
+        if force_refresh or auth.is_expired(token):
+            try:
+                token = auth.refresh(token, self.site_url, self.api_url)
+            except http.HttpError as e:
+                log('Token refresh failed (network): %s' % e, xbmc.LOGWARNING)
+                return token.get('access_token')
+            except auth.AuthError as e:
+                log('Token refresh failed: %s' % e, xbmc.LOGWARNING)
+                token = self._relogin()
+                if token is None:
+                    return None
+            self.data['token'] = token
+            self.save()
+        return token.get('access_token')
+
+    def _relogin(self):
+        if self.data.get('login') and self.data.get('password'):
+            try:
+                return auth.login(self.data['login'], self.data['password'],
+                                  self.site_url, self.api_url)
+            except (auth.AuthError, http.HttpError) as e:
+                log('Re-login failed: %s' % e, xbmc.LOGWARNING)
+        self.data.pop('token', None)
+        self.save()
+        notify(L(30042), error=True)
+        return None
 
 
 # --- list item helpers ---------------------------------------------------------
@@ -82,6 +147,7 @@ _INFO_SETTERS = {
     'tvshowtitle': 'setTvShowTitle',
     'mediatype': 'setMediaType',
     'premiered': 'setPremiered',
+    'playcount': 'setPlaycount',
 }
 
 
@@ -117,8 +183,10 @@ class Plugin(object):
         self.base = argv[0]
         self.handle = int(argv[1])
         self.params = dict(parse_qsl(argv[2].lstrip('?')))
-        self.api = animelib.AnimeLib(ADDON.getSetting('api_url') or animelib.DEFAULT_API,
-                                     ADDON.getSetting('site_url') or 'https://anilib.me')
+        api_url = ADDON.getSetting('api_url') or animelib.DEFAULT_API
+        site_url = ADDON.getSetting('site_url') or 'https://anilib.me'
+        self.account = Account(site_url, api_url)
+        self.api = animelib.AnimeLib(api_url, site_url, token_provider=self.account.access_token)
         self._state = None
 
     @property
@@ -150,16 +218,23 @@ class Plugin(object):
             return
         try:
             handler()
-        except (http.HttpError, kodik.KodikError, ValueError) as e:
+        except (http.HttpError, kodik.KodikError, auth.AuthError, ValueError) as e:
             log('Error in %s: %s' % (action, e), xbmc.LOGERROR)
             notify('%s: %s' % (L(30012), e), error=True)
             if action == 'play':
                 xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
-            elif action not in ('new_search', 'forget_search', 'clear_search'):
+            elif action not in NON_DIRECTORY_ACTIONS:
                 xbmcplugin.endOfDirectory(self.handle, succeeded=False)
 
     # --- menus -------------------------------------------------------------------
     def do_root(self):
+        if self.account.logged_in:
+            name = self.account.user.get('username')
+            self.add_dir('%s%s' % (L(30024), ' (%s)' % name if name else ''), self.url(action='folders'),
+                         {'icon': 'DefaultPlaylist.png'})
+        else:
+            li = make_item(L(30025), {'icon': 'DefaultUser.png'})
+            xbmcplugin.addDirectoryItem(self.handle, self.url(action='login'), li, isFolder=False)
         self.add_dir(L(30000), self.url(action='search'), {'icon': 'DefaultAddonsSearch.png'})
         for sort_by, string_id in (('last_episode_at', 30002), ('views', 30003),
                                    ('rate_avg', 30004), ('created_at', 30005)):
@@ -209,9 +284,124 @@ class Plugin(object):
         self.state.save()
         xbmc.executebuiltin('Container.Refresh')
 
+    # --- account -----------------------------------------------------------------
+    def do_login(self):
+        username = xbmcgui.Dialog().input(L(30026), defaultt=self.account.data.get('login', ''),
+                                          type=xbmcgui.INPUT_ALPHANUM).strip()
+        if not username:
+            return
+        password = xbmcgui.Dialog().input(L(30027), type=xbmcgui.INPUT_ALPHANUM,
+                                          option=xbmcgui.ALPHANUM_HIDE_INPUT)
+        if not password:
+            return
+        xbmc.executebuiltin('ActivateWindow(busydialognocancel)')
+        try:
+            self.account.login(username, password)
+            me = self.api.me()
+            self.account.data['user'] = {'id': me.get('id'), 'username': me.get('username')}
+            self.account.save()
+        except (auth.AuthError, http.HttpError) as e:
+            self.account.logout()
+            xbmc.executebuiltin('Dialog.Close(busydialognocancel)')
+            xbmcgui.Dialog().ok(L(30029), str(e))
+            return
+        xbmc.executebuiltin('Dialog.Close(busydialognocancel)')
+        notify(L(30028) % self.account.user.get('username'))
+        xbmc.executebuiltin('Container.Refresh')
+
+    def do_logout(self):
+        if not self.account.logged_in:
+            return
+        self.account.logout()
+        notify(L(30030))
+        xbmc.executebuiltin('Container.Refresh')
+
+    def _require_login(self):
+        if self.account.logged_in and self.account.user.get('id'):
+            return True
+        notify(L(30036), error=True)
+        return False
+
+    def do_folders(self):
+        if not self._require_login():
+            return xbmcplugin.endOfDirectory(self.handle, succeeded=False)
+        for folder in self.api.bookmark_folders(self.account.user['id']):
+            label = '%s [COLOR grey](%d)[/COLOR]' % (folder.get('name'), folder.get('count') or 0)
+            self.add_dir(label, self.url(action='bookmarks', folder=folder['id']),
+                         {'icon': 'DefaultPlaylist.png'})
+        li = make_item('[COLOR grey]%s[/COLOR]' % L(30035), {'icon': 'DefaultUser.png'})
+        xbmcplugin.addDirectoryItem(self.handle, self.url(action='logout'), li, isFolder=False)
+        self.end(cache=False)
+
+    def do_bookmarks(self):
+        if not self._require_login():
+            return xbmcplugin.endOfDirectory(self.handle, succeeded=False)
+        page = int(self.params.get('page', 1))
+        folder = self.params['folder']
+        items, has_next = self.api.bookmarks(self.account.user['id'], folder, page)
+        for bm in items:
+            media = bm.get('media')
+            if media:
+                self.add_anime(media, in_folder=True)
+        if has_next:
+            self.add_dir('[COLOR yellow]%s (%d) >>[/COLOR]' % (L(30008), page + 1),
+                         self.url(action='bookmarks', folder=folder, page=page + 1))
+        self.end('tvshows', cache=False)
+
+    def do_bookmark_add(self):
+        if not self._require_login():
+            return
+        slug = self.params['slug']
+        folders = self.api.bookmark_folders(self.account.user['id'])
+        idx = xbmcgui.Dialog().select(L(30031), [f.get('name') for f in folders])
+        if idx < 0:
+            return
+        current = self.api.media_bookmark(slug) or {}
+        self.api.set_bookmark(slug, folders[idx]['id'], item_id=current.get('item_id'))
+        notify(L(30033) % folders[idx].get('name'))
+        xbmc.executebuiltin('Container.Refresh')
+
+    def do_bookmark_remove(self):
+        if not self._require_login():
+            return
+        current = self.api.media_bookmark(self.params['slug'])
+        if current and current.get('id'):
+            self.api.delete_bookmark(current['id'])
+        notify(L(30034))
+        xbmc.executebuiltin('Container.Refresh')
+
     # --- catalog -----------------------------------------------------------------
     def _title(self, item):
         return animelib.title_of(item, 'eng' if setting_int('title_lang') == 1 else 'rus')
+
+    def add_anime(self, item, in_folder=False):
+        cover = item.get('cover') or {}
+        title = self._title(item)
+        plot = ' · '.join(x for x in (
+            (item.get('type') or {}).get('label'),
+            (item.get('status') or {}).get('label'),
+            item.get('releaseDateString'),
+            (item.get('ageRestriction') or {}).get('label'),
+        ) if x)
+        info = {
+            'title': title,
+            'originaltitle': item.get('name'),
+            'plot': plot,
+            'rating': animelib.rating_of(item),
+            'mediatype': 'tvshow',
+        }
+        year = (item.get('releaseDate') or '')[:4]
+        if year.isdigit():
+            info['year'] = int(year)
+        art = {'thumb': cover.get('default') or cover.get('thumbnail'),
+               'poster': cover.get('default') or cover.get('thumbnail'),
+               'icon': cover.get('thumbnail')}
+        context = []
+        if self.account.logged_in:
+            slug = item['slug_url']
+            context.append((L(30031), 'RunPlugin(%s)' % self.url(action='bookmark_add', slug=slug)))
+            context.append((L(30032), 'RunPlugin(%s)' % self.url(action='bookmark_remove', slug=slug)))
+        self.add_dir(title, self.url(action='anime', slug=item['slug_url']), art, info, context)
 
     def do_catalog(self):
         page = int(self.params.get('page', 1))
@@ -228,28 +418,7 @@ class Plugin(object):
             if not show_adult and animelib.is_adult(item):
                 continue
             count += 1
-            cover = item.get('cover') or {}
-            title = self._title(item)
-            plot = ' · '.join(x for x in (
-                (item.get('type') or {}).get('label'),
-                (item.get('status') or {}).get('label'),
-                item.get('releaseDateString'),
-                (item.get('ageRestriction') or {}).get('label'),
-            ) if x)
-            info = {
-                'title': title,
-                'originaltitle': item.get('name'),
-                'plot': plot,
-                'rating': animelib.rating_of(item),
-                'mediatype': 'tvshow',
-            }
-            year = (item.get('releaseDate') or '')[:4]
-            if year.isdigit():
-                info['year'] = int(year)
-            art = {'thumb': cover.get('default') or cover.get('thumbnail'),
-                   'poster': cover.get('default') or cover.get('thumbnail'),
-                   'icon': cover.get('thumbnail')}
-            self.add_dir(title, self.url(action='anime', slug=item['slug_url']), art, info)
+            self.add_anime(item)
         if has_next:
             self.add_dir('[COLOR yellow]%s (%d) >>[/COLOR]' % (L(30008), page + 1),
                          self.url(action='catalog', q=query, sort_by=sort_by, genre=genre,
@@ -265,6 +434,14 @@ class Plugin(object):
         episodes = self.api.episodes(slug)
         if not episodes:
             notify(L(30019))
+        last_item_id = None
+        if self.account.logged_in:
+            try:
+                last_item_id = (self.api.media_bookmark(slug) or {}).get('item_id')
+            except http.HttpError as e:
+                log('Cannot get bookmark: %s' % e, xbmc.LOGWARNING)
+        last_index = next((i for i, e in enumerate(episodes) if e.get('id') == last_item_id), -1)
+
         title = self._title(anime)
         cover = anime.get('cover') or {}
         poster = cover.get('default') or cover.get('thumbnail')
@@ -274,7 +451,7 @@ class Plugin(object):
         seasons = {str(e.get('season') or '1') for e in episodes}
         multi_season = len(seasons) > 1
         year = (anime.get('releaseDate') or '')[:4]
-        for ep in episodes:
+        for index, ep in enumerate(episodes):
             number = ep.get('number') or str(ep.get('item_number') or '')
             season = str(ep.get('season') or '1')
             label = '%s %s' % (L(30013), number)
@@ -290,6 +467,10 @@ class Plugin(object):
                 'rating': animelib.rating_of(anime),
                 'mediatype': 'episode',
             }
+            if index < last_index:
+                info['playcount'] = 1
+            elif index == last_index:
+                label = '[COLOR yellow]► %s[/COLOR]' % label
             try:
                 info['episode'] = int(float(number))
                 info['season'] = int(season)
@@ -299,13 +480,12 @@ class Plugin(object):
                 info['year'] = int(year)
             li = make_item(label, {'thumb': poster, 'poster': poster, 'fanart': fanart,
                                    'icon': poster}, info, playable=True)
-            li.addContextMenuItems([(L(30014), 'PlayMedia(%s)' % self.url(
-                action='play', id=ep['id'], slug=slug, select=1))])
-            xbmcplugin.addDirectoryItem(self.handle, self.url(action='play', id=ep['id'], slug=slug),
-                                        li, isFolder=False)
+            play_args = dict(action='play', id=ep['id'], slug=slug, n=ep.get('item_number') or index + 1)
+            li.addContextMenuItems([(L(30014), 'PlayMedia(%s)' % self.url(select=1, **play_args))])
+            xbmcplugin.addDirectoryItem(self.handle, self.url(**play_args), li, isFolder=False)
         xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_UNSORTED)
         xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_EPISODE)
-        self.end('episodes')
+        self.end('episodes', cache=not self.account.logged_in)
 
     # --- playback ----------------------------------------------------------------
     @staticmethod
@@ -320,11 +500,14 @@ class Plugin(object):
         saved = self.state.data['teams'].get(slug)
         if not saved:
             return None
-        for fields in (('team', 'type', 'player'), ('team', 'type'), ('team',)):
-            for p in candidates:
-                key = self._team_key(p)
-                if all(key[f] == saved.get(f) for f in fields):
-                    return p
+        for fields in (('team', 'type'), ('team',)):
+            matches = [p for p in candidates
+                       if all(self._team_key(p)[f] == saved.get(f) for f in fields)]
+            if matches:
+                # The AnimeLib player (up to 1080p) wins over the same team on Kodik.
+                matches.sort(key=lambda p: (not players.is_native(p),
+                                            p.get('player') != saved.get('player')))
+                return matches[0]
         return None
 
     def _choose_player(self, slug, candidates, force_select):
@@ -340,6 +523,7 @@ class Plugin(object):
         def sort_key(p):
             ttype = (p.get('translation_type') or {}).get('id')
             return (0 if preferred_type is None or ttype == preferred_type else 1,
+                    not players.is_native(p),
                     -(p.get('views') or 0))
 
         candidates = sorted(candidates, key=sort_key)
@@ -369,7 +553,7 @@ class Plugin(object):
             return
 
         servers = None
-        if (player.get('player') or '').lower() == 'animelib':
+        if players.is_native(player):
             servers = self.api.video_servers()
         site = (ADDON.getSetting('site_url') or 'https://anilib.me').rstrip('/') + '/'
         stream = players.resolve(
@@ -390,6 +574,19 @@ class Plugin(object):
         if stream.subtitles:
             li.setSubtitles(stream.subtitles)
         xbmcplugin.setResolvedUrl(self.handle, True, li)
+        self._mark_watching(slug, episode)
+
+    def _mark_watching(self, slug, episode):
+        """Same as the site's auto-bookmark: remember the last opened episode."""
+        if not (self.account.logged_in and setting_bool('mark_watched')):
+            return
+        try:
+            current = self.api.media_bookmark(slug) or {}
+            n = self.params.get('n')
+            self.api.set_bookmark(slug, current.get('status') or animelib.ANIME_FOLDER_WATCHING,
+                                  item_id=episode['id'], item_number=int(n) if n else None)
+        except (http.HttpError, auth.AuthError, ValueError) as e:
+            log('Cannot update bookmark: %s' % e, xbmc.LOGWARNING)
 
 
 def run():

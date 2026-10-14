@@ -8,12 +8,7 @@ PER_PAGE = 60
 
 ANIME_FIELDS = ['summary', 'genres', 'releaseDate', 'background', 'episodes_count']
 
-SORTS = {
-    'last_episode_at': 'Последние обновления',
-    'views': 'Популярное',
-    'rate_avg': 'По рейтингу',
-    'created_at': 'Новое на сайте',
-}
+ANIME_FOLDER_WATCHING = 21  # default "Смотрю" list for anime
 
 # Fallback for constants?fields[]=videoServers
 DEFAULT_VIDEO_SERVERS = [
@@ -24,9 +19,11 @@ DEFAULT_VIDEO_SERVERS = [
 
 
 class AnimeLib(object):
-    def __init__(self, api_url=DEFAULT_API, site_url='https://anilib.me'):
+    def __init__(self, api_url=DEFAULT_API, site_url='https://anilib.me', token_provider=None):
+        """token_provider(force_refresh=False) -> access token or None."""
         self.api = (api_url or DEFAULT_API).rstrip('/')
         self.site = site_url.rstrip('/')
+        self.token_provider = token_provider
         self.headers = {
             'Site-Id': SITE_ID,
             'Accept': 'application/json',
@@ -34,12 +31,67 @@ class AnimeLib(object):
             'Origin': self.site,
         }
 
+    def _headers(self, force_refresh=False):
+        headers = dict(self.headers)
+        token = self.token_provider(force_refresh) if self.token_provider else None
+        if token:
+            headers['Authorization'] = 'Bearer ' + token
+        return headers
+
+    def _call(self, path, params=None, json_body=None, method=None):
+        url = self.api + path
+        resp = http.fetch(url, params=params, json_body=json_body, method=method,
+                          headers=self._headers())
+        if resp.code == 401 and self.token_provider:
+            resp = http.fetch(url, params=params, json_body=json_body, method=method,
+                              headers=self._headers(force_refresh=True))
+        if resp.code >= 400:
+            raise http.HttpError('HTTP %d: %s' % (resp.code, url), resp.code, resp.text)
+        return resp.json() if resp.text.strip() else {}
+
     def _get(self, path, params=None):
-        resp = http.get_json(self.api + path, params=params, headers=self.headers)
-        return resp.get('data', resp)
+        resp = self._call(path, params)
+        return resp.get('data', resp) if isinstance(resp, dict) else resp
 
     def _get_raw(self, path, params=None):
-        return http.get_json(self.api + path, params=params, headers=self.headers)
+        return self._call(path, params)
+
+    # --- account -------------------------------------------------------------
+    def me(self):
+        return self._get('/auth/me')
+
+    def bookmark_folders(self, user_id):
+        folders = self._get('/bookmarks/folder/%s' % user_id) or []
+        return [f for f in folders if int(SITE_ID) in (f.get('site_ids') or [])]
+
+    def bookmarks(self, user_id, folder_id, page=1, sort_by='updated_at'):
+        """Returns (bookmarks, has_next). Each bookmark has 'media' (anime) and 'item_id'."""
+        resp = self._get_raw('/bookmarks', {'user_id': user_id, 'status': folder_id, 'page': page,
+                                            'sort_by': sort_by, 'sort_type': 'desc'})
+        items = resp.get('data') or []
+        return items, bool((resp.get('links') or {}).get('next'))
+
+    def media_bookmark(self, slug_url):
+        try:
+            data = self._get('/anime/%s/bookmark' % slug_url)
+        except http.HttpError as e:
+            if e.code == 404:
+                return None
+            raise
+        return data or None
+
+    def set_bookmark(self, slug_url, status, item_id=None, item_number=None):
+        bookmark = {'status': status}
+        if item_id is not None:
+            bookmark['item_id'] = item_id
+        return self._call('/bookmarks', json_body={
+            'media_type': 'anime', 'media_slug': slug_url, 'bookmark': bookmark,
+            'meta': {'item_number': item_number} if item_number is not None else {},
+        }, method='POST')
+
+    def delete_bookmark(self, bookmark_id):
+        return self._call('/bookmarks/%s' % bookmark_id, params={'media_type': 'anime'},
+                          method='DELETE')
 
     # --- catalog -----------------------------------------------------------
     def catalog(self, page=1, query=None, sort_by=None, genres=None, types=None):

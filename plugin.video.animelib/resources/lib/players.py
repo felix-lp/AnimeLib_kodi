@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Turns AnimeLib episode "players" into playable stream URLs."""
-from urllib.parse import quote, urljoin
+from urllib.parse import quote
 
 from . import kodik
 
@@ -24,9 +24,16 @@ def describe(player):
     parts = [team]
     if ttype:
         parts.append(ttype)
+    if is_native(player):
+        best = max([int(q.get('quality') or 0) for q in (player.get('video') or {}).get('quality') or []] or [0])
+        source = 'AnimeLib' + (' %dp' % best if best else '')
     if source:
         parts.append(source)
     return ' · '.join(parts)
+
+
+def is_native(player):
+    return (player.get('player') or '').lower() == 'animelib'
 
 
 def is_supported(player):
@@ -79,8 +86,11 @@ def resolve(player, max_quality=0, video_servers=None, server_id='main',
             base = next((s['url'] for s in servers if s.get('id') == server_id), None)
             if base is None and servers:
                 base = servers[0]['url']
-            base = (base or 'https://video1.cdnlibs.org/.аs/').rstrip('/') + '/'
-            href = urljoin(base, href.lstrip('/'))
+            # Same as the site's player: server url + href
+            base = base or 'https://video1.cdnlibs.org/.аs/'
+            if base.endswith('/') and href.startswith('/'):
+                href = href[1:]
+            href = base + href
         elif href.startswith('//'):
             href = 'https:' + href
         subs = []

@@ -183,3 +183,75 @@ msgctxt "#30122"
 msgid "360p"
 msgstr ""
 
+msgctxt "#30024"
+msgid "My lists"
+msgstr ""
+
+msgctxt "#30025"
+msgid "Log in to AnimeLib"
+msgstr ""
+
+msgctxt "#30026"
+msgid "Login or email"
+msgstr ""
+
+msgctxt "#30027"
+msgid "Password"
+msgstr ""
+
+msgctxt "#30028"
+msgid "Logged in as %s"
+msgstr ""
+
+msgctxt "#30029"
+msgid "Login failed"
+msgstr ""
+
+msgctxt "#30030"
+msgid "Logged out"
+msgstr ""
+
+msgctxt "#30031"
+msgid "Add to list"
+msgstr ""
+
+msgctxt "#30032"
+msgid "Remove from list"
+msgstr ""
+
+msgctxt "#30033"
+msgid "Added to \"%s\""
+msgstr ""
+
+msgctxt "#30034"
+msgid "Removed from list"
+msgstr ""
+
+msgctxt "#30035"
+msgid "Log out"
+msgstr ""
+
+msgctxt "#30036"
+msgid "Please log in first"
+msgstr ""
+
+msgctxt "#30037"
+msgid "Account"
+msgstr ""
+
+msgctxt "#30038"
+msgid "Log in"
+msgstr ""
+
+msgctxt "#30039"
+msgid "Log out"
+msgstr ""
+
+msgctxt "#30040"
+msgid "Mark opened episodes on the site"
+msgstr ""
+
+msgctxt "#30042"
+msgid "Session expired, please log in again"
+msgstr ""
+

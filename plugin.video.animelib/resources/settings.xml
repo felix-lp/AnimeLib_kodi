@@ -7,6 +7,11 @@
         <setting id="title_lang" type="enum" label="30108" lvalues="30109|30110" default="0"/>
         <setting id="show_adult" type="bool" label="30107" default="false"/>
     </category>
+    <category label="30037">
+        <setting id="login_btn" type="action" label="30038" action="RunPlugin(plugin://plugin.video.animelib/?action=login)"/>
+        <setting id="logout_btn" type="action" label="30039" action="RunPlugin(plugin://plugin.video.animelib/?action=logout)"/>
+        <setting id="mark_watched" type="bool" label="30040" default="true"/>
+    </category>
     <category label="30111">
         <setting id="api_url" type="text" label="30112" default="https://api.cdnlibs.org/api"/>
         <setting id="site_url" type="text" label="30113" default="https://anilib.me"/>

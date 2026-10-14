@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="repository.animelib" name="AnimeLib Repository" version="1.0.0" provider-name="felix-lp">
+    <extension point="xbmc.addon.repository" name="AnimeLib Repository">
+        <dir>
+            <info compressed="false">https://raw.githubusercontent.com/felix-lp/AnimeLib_kodi/gh-pages/addons.xml</info>
+            <checksum>https://raw.githubusercontent.com/felix-lp/AnimeLib_kodi/gh-pages/addons.xml.md5</checksum>
+            <datadir zip="true">https://raw.githubusercontent.com/felix-lp/AnimeLib_kodi/gh-pages/</datadir>
+        </dir>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="ru_RU">Репозиторий аддона AnimeLib</summary>
+        <summary lang="en_GB">Repository for the AnimeLib add-on</summary>
+        <description lang="ru_RU">Устанавливает аддон AnimeLib и автоматически получает его обновления с GitHub.</description>
+        <description lang="en_GB">Installs the AnimeLib add-on and keeps it updated from GitHub.</description>
+        <platform>all</platform>
+        <license>MIT</license>
+        <assets>
+            <icon>icon.png</icon>
+        </assets>
+    </extension>
+</addon>

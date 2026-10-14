@@ -12,13 +12,29 @@
 - Выбор максимального качества (1080p, 720p, 480p, 360p).
 - Плееры: **Kodik** (через него идёт почти всё видео на сайте) и собственный плеер **AnimeLib** с внешними субтитрами.
 
-## Установка
+## Установка (с автообновлением)
 
-```sh
-python3 build.py        # создаст dist/plugin.video.animelib-<версия>.zip
-```
+1. В Kodi включите *Настройки → Система → Дополнения → Неизвестные источники*.
+2. Скачайте `repository.animelib-1.0.0.zip`:
+   <https://raw.githubusercontent.com/felix-lp/AnimeLib_kodi/gh-pages/repository.animelib/repository.animelib-1.0.0.zip>
+3. *Дополнения → Установить из ZIP-файла* → выберите скачанный файл.
+4. *Дополнения → Установить из репозитория → AnimeLib Repository → Видеодополнения → AnimeLib*.
 
-В Kodi: *Настройки → Дополнения → Установить из ZIP-файла* (сначала разрешите «Неизвестные источники»).
+Дальше Kodi сам подхватывает новые версии (или вручную: *Дополнения → Мои дополнения → AnimeLib → Обновить*).
+Репозиторий собирается GitHub Actions при каждом push в ветку по умолчанию и публикуется в ветку `gh-pages`.
+
+Чтобы Kodi мог скачивать файлы, репозиторий на GitHub должен быть публичным.
+
+Локальная сборка: `python3 build.py` (zip-файлы в `dist/`) или `python3 build.py --repo DIR` (готовый Kodi-репозиторий).
+
+## Аккаунт
+
+*Настройки аддона → Аккаунт → Войти* (или пункт «Войти в аккаунт AnimeLib» в главном меню).
+После входа появляются «Мои списки» (Смотрю, Запланировано, Просмотрено и т.д.), в контекстном меню тайтлов —
+«Добавить в список» / «Удалить из списка», а открытый эпизод отмечается на сайте как последний просмотренный.
+Вход идёт через auth.lib.social так же, как на сайте (OAuth + PKCE, капча ALTCHA решается автоматически).
+Токены, логин и пароль хранятся локально в `userdata/addon_data/plugin.video.animelib/account.json`;
+пароль нужен для повторного входа, если токен истечёт.
 
 ## Как устроено
 
@@ -31,6 +47,11 @@ AnimeLib берёт данные из открытого JSON API (`https://api.
 | `GET /episodes?anime_id={slug_url}` | список эпизодов |
 | `GET /episodes/{id}` | эпизод со списком плееров (`players`): команда, тип перевода, ссылка |
 | `GET /constants?fields[]=genres&fields[]=types&fields[]=videoServers` | справочники |
+| `POST /auth/oauth/token` | токены (authorization_code / refresh_token) |
+| `GET /auth/me` | текущий пользователь |
+| `GET /bookmarks/folder/{user_id}` | списки пользователя |
+| `GET /bookmarks?user_id=&status={folder}&page=` | тайтлы в списке |
+| `GET /anime/{slug_url}/bookmark`, `POST /bookmarks`, `DELETE /bookmarks/{id}` | закладка тайтла |
 
 У плеера Kodik ссылка ведёт на страницу `kodikplayer.com/seria/...`. Аддон берёт из неё подписанные параметры, отправляет POST-запрос на эндпоинт плеера (сейчас `/ftor`) и расшифровывает ссылки на HLS-потоки. Это base64 со сдвигом букв. Эндпоинт и величину сдвига аддон каждый раз ищет в JS плеера, так что небольшие изменения на стороне Kodik он переживёт.
 
@@ -39,14 +60,16 @@ AnimeLib берёт данные из открытого JSON API (`https://api.
 ## Структура
 
 ```
+repository.animelib/           # Kodi-репозиторий (указывает на ветку gh-pages)
 plugin.video.animelib/
-├── addon.xml
+├── addon.xml                  # версию поднимать при каждом изменении
 ├── main.py                    # точка входа
 └── resources/
     ├── settings.xml
     ├── language/              # ru_ru, en_gb
     └── lib/
         ├── animelib.py        # клиент API AnimeLib
+        ├── auth.py            # вход в аккаунт (OAuth + ALTCHA)
         ├── kodik.py           # получение прямых ссылок из Kodik
         ├── players.py         # выбор плеера и качества
         ├── plugin.py          # меню и маршрутизация Kodi

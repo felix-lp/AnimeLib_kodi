@@ -17,7 +17,8 @@ ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
 ICON = ADDON.getAddonInfo('icon')
 QUALITIES = [0, 1080, 720, 480, 360]
-VIDEO_SERVERS = ['main', 'secondary_1', 'secondary_2']
+VIDEO_SERVERS = [None, 'main', 'secondary_1', 'secondary_2']  # None = as the site (player.video_domain)
+WATCHED_PERCENT = 85
 SEARCH_HISTORY_SIZE = 20
 NON_DIRECTORY_ACTIONS = ('new_search', 'forget_search', 'clear_search', 'login', 'logout',
                          'bookmark_add', 'bookmark_remove')
@@ -306,7 +307,7 @@ class Plugin(object):
             xbmcgui.Dialog().ok(L(30029), str(e))
             return
         xbmc.executebuiltin('Dialog.Close(busydialognocancel)')
-        notify(L(30028) % self.account.user.get('username'))
+        notify(L(30028).replace('%s', self.account.user.get('username') or ''))
         xbmc.executebuiltin('Container.Refresh')
 
     def do_logout(self):
@@ -358,7 +359,7 @@ class Plugin(object):
             return
         current = self.api.media_bookmark(slug) or {}
         self.api.set_bookmark(slug, folders[idx]['id'], item_id=current.get('item_id'))
-        notify(L(30033) % folders[idx].get('name'))
+        notify(L(30033).replace('%s', folders[idx].get('name') or ''))
         xbmc.executebuiltin('Container.Refresh')
 
     def do_bookmark_remove(self):
@@ -434,13 +435,20 @@ class Plugin(object):
         episodes = self.api.episodes(slug)
         if not episodes:
             notify(L(30019))
-        last_item_id = None
+        last_index = -1
         if self.account.logged_in:
             try:
-                last_item_id = (self.api.media_bookmark(slug) or {}).get('item_id')
+                bookmark = self.api.media_bookmark(slug) or {}
             except http.HttpError as e:
                 log('Cannot get bookmark: %s' % e, xbmc.LOGWARNING)
-        last_index = next((i for i, e in enumerate(episodes) if e.get('id') == last_item_id), -1)
+                bookmark = {}
+            item_id = bookmark.get('item_id')
+            item_number = (bookmark.get('meta') or {}).get('item_number')
+            for i, e in enumerate(episodes):
+                if (item_id and e.get('id') == item_id) or (
+                        not item_id and item_number and e.get('item_number') == item_number):
+                    last_index = i
+                    break
 
         title = self._title(anime)
         cover = anime.get('cover') or {}
@@ -467,9 +475,9 @@ class Plugin(object):
                 'rating': animelib.rating_of(anime),
                 'mediatype': 'episode',
             }
-            if index < last_index:
+            if index <= last_index:
                 info['playcount'] = 1
-            elif index == last_index:
+            elif index == last_index + 1 and last_index >= 0:
                 label = '[COLOR yellow]► %s[/COLOR]' % label
             try:
                 info['episode'] = int(float(number))
@@ -560,7 +568,8 @@ class Plugin(object):
             player,
             max_quality=QUALITIES[setting_int('max_quality')] if setting_int('max_quality') < len(QUALITIES) else 0,
             video_servers=servers,
-            server_id=VIDEO_SERVERS[min(setting_int('video_server'), len(VIDEO_SERVERS) - 1)],
+            server_id=VIDEO_SERVERS[min(setting_int('video_server'), len(VIDEO_SERVERS) - 1)]
+            or player.get('video_domain') or 'main',
             referer=site)
         log('Playing %s (%sp) via %s' % (players.describe(player), stream.quality, player.get('player')))
 
@@ -574,19 +583,61 @@ class Plugin(object):
         if stream.subtitles:
             li.setSubtitles(stream.subtitles)
         xbmcplugin.setResolvedUrl(self.handle, True, li)
-        self._mark_watching(slug, episode)
+        self._track_playback(slug, episode, player)
 
-    def _mark_watching(self, slug, episode):
-        """Same as the site's auto-bookmark: remember the last opened episode."""
-        if not (self.account.logged_in and setting_bool('mark_watched')):
+    def _track_playback(self, slug, episode, player):
+        """Keeps running while the episode plays: skips the opening and, once
+        WATCHED_PERCENT is reached, marks the episode as watched on the site."""
+        mark = self.account.logged_in and setting_bool('mark_watched')
+        opening = None
+        if setting_bool('skip_opening'):
+            opening = next((t for t in player.get('timecode') or [] if t.get('type') == 'opening'), None)
+        if not mark and not opening:
+            return
+        monitor = xbmc.Monitor()
+        kodi_player = xbmc.Player()
+        for _ in range(120):
+            if kodi_player.isPlayingVideo():
+                break
+            if monitor.waitForAbort(0.5):
+                return
+        else:
             return
         try:
-            current = self.api.media_bookmark(slug) or {}
-            n = self.params.get('n')
-            self.api.set_bookmark(slug, current.get('status') or animelib.ANIME_FOLDER_WATCHING,
-                                  item_id=episode['id'], item_number=int(n) if n else None)
-        except (http.HttpError, auth.AuthError, ValueError) as e:
-            log('Cannot update bookmark: %s' % e, xbmc.LOGWARNING)
+            playing_file = kodi_player.getPlayingFile()
+        except RuntimeError:
+            return
+        watched = False
+        while not monitor.abortRequested():
+            try:
+                if not kodi_player.isPlayingVideo() or kodi_player.getPlayingFile() != playing_file:
+                    break
+                position = kodi_player.getTime()
+                total = kodi_player.getTotalTime()
+            except RuntimeError:
+                break
+            if opening and opening.get('from', 0) <= position < (opening.get('to') or 0) - 1:
+                kodi_player.seekTime(float(opening['to']))
+                opening = None
+            if mark and not watched and total > 0 and position * 100.0 / total >= WATCHED_PERCENT:
+                watched = True
+                self._mark_watched(slug, episode, player)
+            if monitor.waitForAbort(1):
+                break
+
+    def _mark_watched(self, slug, episode, player):
+        """Like the site: mark the player as viewed and move the list bookmark to this episode
+        (only for titles that are already in one of the user's lists)."""
+        try:
+            self.api.mark_viewed(episode.get('anime_id'), player['id'])
+            current = self.api.media_bookmark(slug)
+            if current:
+                n = self.params.get('n')
+                self.api.set_bookmark(slug, current.get('status') or animelib.ANIME_FOLDER_WATCHING,
+                                      item_id=episode['id'], item_number=int(n) if n else None)
+            log('Marked as watched: %s #%s' % (slug, self.params.get('n')))
+        except (http.HttpError, auth.AuthError, ValueError, KeyError) as e:
+            log('Cannot mark as watched: %s' % e, xbmc.LOGWARNING)
 
 
 def run():

@@ -248,10 +248,18 @@ msgid "Log out"
 msgstr ""
 
 msgctxt "#30040"
-msgid "Mark opened episodes on the site"
+msgid "Mark watched episodes on the site (85%)"
 msgstr ""
 
 msgctxt "#30042"
 msgid "Session expired, please log in again"
+msgstr ""
+
+msgctxt "#30043"
+msgid "Skip opening (when the site has timecodes)"
+msgstr ""
+
+msgctxt "#30044"
+msgid "Auto (as on the site)"
 msgstr ""
 

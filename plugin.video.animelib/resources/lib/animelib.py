@@ -89,6 +89,11 @@ class AnimeLib(object):
             'meta': {'item_number': item_number} if item_number is not None else {},
         }, method='POST')
 
+    def mark_viewed(self, anime_id, player_id):
+        """Same request the site sends when an episode is watched (marks the player as viewed)."""
+        return self._call('/anime/%s/players/%s/view' % (anime_id, player_id), json_body={},
+                          method='POST')
+
     def delete_bookmark(self, bookmark_id):
         return self._call('/bookmarks/%s' % bookmark_id, params={'media_type': 'anime'},
                           method='DELETE')

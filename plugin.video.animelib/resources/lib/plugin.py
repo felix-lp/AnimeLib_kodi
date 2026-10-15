@@ -206,17 +206,6 @@ def library_source_configured(root):
     return False
 
 
-def make_anime_node(lib):
-    if not setting_bool('library_anime_node'):
-        return
-    try:
-        library.ensure_anime_node(lib.root, {
-            'section': L(30066), 'all': L(30067), 'inprogress': L(30068),
-            'recent': L(30069), 'genres': L(30070)})
-    except Exception as e:  # never block the export because of the node files
-        log('Cannot create anime library node: %s' % e, xbmc.LOGWARNING)
-
-
 def make_api():
     addon = xbmcaddon.Addon()  # fresh instance: may run inside the long-lived service
     api_url = addon.getSetting('api_url') or animelib.DEFAULT_API
@@ -607,7 +596,6 @@ class Plugin(object):
         return self.params.get('title') or self._title(self.api.anime(slug))
 
     def _after_library_change(self, lib):
-        make_anime_node(lib)
         if not library_source_configured(lib.root):
             self.do_library_help()
         else:
@@ -670,7 +658,6 @@ class Plugin(object):
         finally:
             xbmc.executebuiltin('Dialog.Close(busydialognocancel)')
         notify(L(30050).replace('%d', str(count)))
-        make_anime_node(lib)
         if count:
             xbmc.executebuiltin('UpdateLibrary(video)')
 

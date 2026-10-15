@@ -12,7 +12,7 @@ import xbmcgui
 import xbmcplugin
 import xbmcvfs
 
-from . import animelib, auth, http, kodik, library, players
+from . import animelib, auth, http, kodik, library, players, shikimori
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -25,6 +25,7 @@ META_TTL = 14 * 24 * 3600
 META_CACHE_SIZE = 3000
 META_CONCURRENCY = 8
 MISSING_TTL = 24 * 3600
+META_VERSION = 2  # bump to invalidate cached descriptions
 BOOKMARKS_TTL = 600
 LIBRARY_DEFAULT = 'special://profile/addon_data/plugin.video.animelib/library/'
 LIBRARY_UPDATE_HOURS = [0, 6, 12, 24]
@@ -97,7 +98,8 @@ class MetaCache(JsonStore):
 
     def get(self, slug):
         entry = self.data['items'].get(slug)
-        if entry and time.time() - entry.get('ts', 0) < META_TTL:
+        if (entry and time.time() - entry.get('ts', 0) < META_TTL
+                and (entry.get('missing') or entry.get('v') == META_VERSION)):
             return entry
         return None
 
@@ -106,11 +108,16 @@ class MetaCache(JsonStore):
         self.data['items'][slug] = {'ts': time.time() - META_TTL + MISSING_TTL, 'missing': True}
         self.dirty = True
 
-    def put(self, slug, anime):
+    def put(self, slug, anime, shiki=None):
+        """shiki: {'plot', 'genres'} from Shikimori - its descriptions keep the character
+        names that AnimeLib's copies lose."""
+        shiki = shiki or {}
+        genres = [g.get('name') for g in anime.get('genres') or [] if g.get('name')]
         self.data['items'][slug] = {
+            'v': META_VERSION,
             'ts': time.time(),
-            'plot': animelib.summary_text(anime.get('summary')),
-            'genres': [g.get('name') for g in anime.get('genres') or [] if g.get('name')],
+            'plot': shiki.get('plot') or animelib.summary_text(anime.get('summary')),
+            'genres': genres or shiki.get('genres') or [],
             'fanart': (anime.get('background') or {}).get('url'),
             'premiered': anime.get('releaseDate'),
         }
@@ -184,10 +191,32 @@ def colored(text, rrggbb):
     return '[COLOR FF%s]%s[/COLOR]' % (rrggbb.upper(), text)
 
 
+def shiki_details(animes):
+    """{shikimori id: details} for AnimeLib title dicts (empty when disabled/unavailable)."""
+    if not setting_bool('shiki_descriptions'):
+        return {}
+    ids = [shikimori.shiki_id(a) for a in animes]
+    try:
+        return shikimori.details([i for i in ids if i])
+    except Exception as e:  # descriptions are optional
+        log('Shikimori unavailable: %s' % e, xbmc.LOGWARNING)
+        return {}
+
+
+def describe(slug, anime, cache=None):
+    """Cached description/genres for a title, fetching Shikimori if needed."""
+    cache = cache or MetaCache()
+    entry = cache.get(slug)
+    if not entry or entry.get('missing'):
+        entry = cache.put(slug, anime, shiki_details([anime]).get(shikimori.shiki_id(anime)))
+        cache.save()
+    return entry
+
+
 def make_library():
     root = ADDON.getSetting('library_path') or LIBRARY_DEFAULT
     site = (ADDON.getSetting('site_url') or 'https://anilib.me').rstrip('/') + '/'
-    return library.Library(root, JsonStore('library.json'), site)
+    return library.Library(root, JsonStore('library.json'), site, describe=describe)
 
 
 def library_source_configured(root):
@@ -380,9 +409,10 @@ class Plugin(object):
             elif hidden:
                 for slug in hidden:
                     self.meta.put_missing(slug)
+            fetched = {k: v for k, v in fetched.items() if v}
+            shiki = shiki_details(fetched.values())
             for slug, anime in fetched.items():
-                if anime:
-                    result[slug] = self.meta.put(slug, anime)
+                result[slug] = self.meta.put(slug, anime, shiki.get(shikimori.shiki_id(anime)))
             self.meta.save()
         return result
 
@@ -742,8 +772,7 @@ class Plugin(object):
     def do_anime(self):
         slug = self.params['slug']
         anime = self.api.anime(slug)
-        self.meta.put(slug, anime)
-        self.meta.save()
+        details = describe(slug, anime, self.meta)
         episodes = self.api.episodes(slug)
         if not episodes:
             notify(L(30019))
@@ -766,8 +795,8 @@ class Plugin(object):
         cover = anime.get('cover') or {}
         poster = cover.get('default') or cover.get('thumbnail')
         fanart = (anime.get('background') or {}).get('url') or poster
-        plot = animelib.summary_text(anime.get('summary'))
-        genres = [g.get('name') for g in anime.get('genres') or [] if g.get('name')]
+        plot = details.get('plot') or animelib.summary_text(anime.get('summary'))
+        genres = details.get('genres') or []
         seasons = {str(e.get('season') or '1') for e in episodes}
         multi_season = len(seasons) > 1
         year = (anime.get('releaseDate') or '')[:4]

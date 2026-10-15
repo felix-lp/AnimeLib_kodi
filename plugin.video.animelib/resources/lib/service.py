@@ -12,7 +12,7 @@ import time
 import xbmc
 import xbmcgui
 
-from . import plugin
+from . import library, plugin
 
 PENDING_TTL = 120  # seconds between resolving the URL and playback start
 
@@ -90,6 +90,11 @@ def update_library(force=False):
 
 
 def run():
+    try:
+        if library.remove_anime_node():
+            plugin.log('Removed the "Anime" library section added by 1.6.0')
+    except Exception as e:
+        plugin.log('Cannot remove the anime library section: %s' % e, xbmc.LOGWARNING)
     monitor = xbmc.Monitor()
     tracker = Tracker()
     started = time.time()

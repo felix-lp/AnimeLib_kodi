@@ -347,3 +347,7 @@ msgctxt "#30065"
 msgid "AnimeLib: too many requests, try again in a minute"
 msgstr ""
 
+msgctxt "#30072"
+msgid "Descriptions from Shikimori (complete, with character names)"
+msgstr ""
+

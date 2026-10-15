@@ -56,16 +56,18 @@ def episode_numbers(episodes):
         yield ep, season, number
 
 
-def tvshow_nfo(anime, title):
-    genres = ''.join('  <genre>%s</genre>\n' % escape(g.get('name'))
-                     for g in anime.get('genres') or [] if g.get('name'))
+def tvshow_nfo(anime, title, details=None):
+    details = details or {}
+    names = details.get('genres') or [g.get('name') for g in anime.get('genres') or [] if g.get('name')]
+    genres = ''.join('  <genre>%s</genre>\n' % escape(g) for g in names)
+    plot = details.get('plot') or animelib.summary_text(anime.get('summary'))
     date = anime.get('releaseDate') or ''
     return ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<tvshow>\n'
             '  <title>%s</title>\n  <originaltitle>%s</originaltitle>\n  <plot>%s</plot>\n'
             '  <year>%s</year>\n  <premiered>%s</premiered>\n  <rating>%s</rating>\n%s'
             '  <uniqueid type="animelib" default="true">%s</uniqueid>\n</tvshow>\n') % (
         escape(title), escape(anime.get('name') or ''),
-        escape(animelib.summary_text(anime.get('summary'))),
+        escape(plot),
         date[:4], date, animelib.rating_of(anime), genres, escape(anime.get('slug_url') or ''))
 
 
@@ -83,8 +85,10 @@ def strm(ep, slug, index):
 
 
 class Library(object):
-    def __init__(self, root, store, referer):
-        """store: JsonStore with data['titles'] = {slug: {'folder', 'title'}}."""
+    def __init__(self, root, store, referer, describe=None):
+        """store: JsonStore with data['titles'] = {slug: {'folder', 'title'}}.
+        describe(slug, anime) -> {'plot', 'genres'} overrides AnimeLib's description."""
+        self.describe = describe
         self.root = root.rstrip('/\\') + '/'
         self.store = store
         self.store.data.setdefault('titles', {})
@@ -120,7 +124,13 @@ class Library(object):
                 folder = self.root + '%s [%s]/' % (name, anime.get('id'))
         if not xbmcvfs.exists(folder):
             xbmcvfs.mkdirs(folder)
-        _write(_join(folder, 'tvshow.nfo'), tvshow_nfo(anime, title))
+        details = None
+        if self.describe:
+            try:
+                details = self.describe(slug, anime)
+            except Exception:
+                details = None
+        _write(_join(folder, 'tvshow.nfo'), tvshow_nfo(anime, title, details))
         cover = anime.get('cover') or {}
         self._image(cover.get('default') or cover.get('thumbnail'), _join(folder, 'poster.jpg'))
         self._image((anime.get('background') or {}).get('url'), _join(folder, 'fanart.jpg'))
@@ -154,3 +164,38 @@ class Library(object):
                 if log:
                     log('Library update failed for %s: %s' % (slug, e))
         return total
+
+
+# --- cleanup of the "Anime" library section from 1.6.0 ----------------------------
+NODES_DIR = 'special://profile/library/video/'
+SYSTEM_NODES_DIR = 'special://xbmc/system/library/video/'
+
+
+def _read(path):
+    f = xbmcvfs.File(path)
+    try:
+        return bytes(f.readBytes())
+    finally:
+        f.close()
+
+
+def _same_tree(copy, original):
+    """True if every file under copy exists under original with identical content."""
+    dirs, files = xbmcvfs.listdir(copy)
+    for name in files:
+        if not xbmcvfs.exists(original + name) or _read(copy + name) != _read(original + name):
+            return False
+    return all(_same_tree(copy + d + '/', original + d + '/') for d in dirs)
+
+
+def remove_anime_node():
+    """1.6.0 added an "Anime" node and, because Kodi then ignores the default nodes,
+    copied the defaults into the profile. Removes both; the copied defaults only if
+    they are still identical to Kodi's own (so user-made nodes are never touched)."""
+    folder = NODES_DIR + 'animelib/'
+    if not xbmcvfs.exists(folder):
+        return False
+    xbmcvfs.rmdir(folder, True)
+    if _same_tree(NODES_DIR, SYSTEM_NODES_DIR):
+        xbmcvfs.rmdir(NODES_DIR, True)
+    return True

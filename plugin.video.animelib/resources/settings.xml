@@ -18,6 +18,7 @@
     <category label="30046">
         <setting id="library_help_btn" type="action" label="30054" action="RunPlugin(plugin://plugin.video.animelib/?action=library_help)"/>
         <setting id="library_path" type="folder" label="30056" default="special://profile/addon_data/plugin.video.animelib/library/" option="writeable"/>
+        <setting id="library_anime_node" type="bool" label="30071" default="true"/>
         <setting id="library_update_hours" type="enum" label="30057" lvalues="30058|30059|30060|30061" default="2"/>
         <setting id="library_update_btn" type="action" label="30062" action="RunPlugin(plugin://plugin.video.animelib/?action=library_update)"/>
     </category>

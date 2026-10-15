@@ -347,3 +347,27 @@ msgctxt "#30065"
 msgid "AnimeLib: too many requests, try again in a minute"
 msgstr ""
 
+msgctxt "#30066"
+msgid "Anime"
+msgstr ""
+
+msgctxt "#30067"
+msgid "All anime"
+msgstr ""
+
+msgctxt "#30068"
+msgid "Watching now"
+msgstr ""
+
+msgctxt "#30069"
+msgid "New episodes"
+msgstr ""
+
+msgctxt "#30070"
+msgid "Genres"
+msgstr ""
+
+msgctxt "#30071"
+msgid "Separate \"Anime\" section in the video library"
+msgstr ""
+

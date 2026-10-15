@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.animelib" name="AnimeLib" version="1.5.3" provider-name="felix-lp">
+<addon id="plugin.video.animelib" name="AnimeLib" version="1.6.0" provider-name="felix-lp">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
     </requires>
@@ -19,7 +19,8 @@
         <website>https://anilib.me</website>
         <disclaimer lang="ru_RU">Аддон не связан с AnimeLib. Весь контент предоставляется сторонними сайтами.</disclaimer>
         <disclaimer lang="en_GB">This add-on is not affiliated with AnimeLib. All content is provided by third-party websites.</disclaimer>
-        <news>1.5.3: инструкция по подключению медиатеки: путь вводится вручную (Обзор не показывает скрытую папку AppData).
+        <news>1.6.0: отдельный раздел «Аниме» в медиатеке Kodi (все аниме, смотрю сейчас, новые эпизоды, жанры).
+1.5.3: инструкция по подключению медиатеки: путь вводится вручную (Обзор не показывает скрытую папку AppData).
 1.5.2: исправлены падения Kodi при открытии списков — описания загружаются без потоков Python.
 1.5.1: описания и медиатека больше не упираются в лимит запросов аккаунта (HTTP 429); недоступные тайтлы не запрашиваются повторно.
 1.5.0: добавление аниме в медиатеку Kodi (по одному или целым списком, новые эпизоды добавляются автоматически); тайтлы из ваших списков подсвечиваются цветом списка.

@@ -13,6 +13,10 @@ import xbmcvfs
 from . import animelib, http
 
 PLUGIN_URL = 'plugin://plugin.video.animelib/'
+ANIME_TAG = 'Аниме'
+NODES_DIR = 'special://profile/library/video/'
+SYSTEM_NODES_DIR = 'special://xbmc/system/library/video/'
+NODE_FOLDER = 'animelib/'
 
 
 def _join(folder, name):
@@ -63,10 +67,12 @@ def tvshow_nfo(anime, title):
     return ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<tvshow>\n'
             '  <title>%s</title>\n  <originaltitle>%s</originaltitle>\n  <plot>%s</plot>\n'
             '  <year>%s</year>\n  <premiered>%s</premiered>\n  <rating>%s</rating>\n%s'
+            '  <tag>%s</tag>\n'
             '  <uniqueid type="animelib" default="true">%s</uniqueid>\n</tvshow>\n') % (
         escape(title), escape(anime.get('name') or ''),
         escape(animelib.summary_text(anime.get('summary'))),
-        date[:4], date, animelib.rating_of(anime), genres, escape(anime.get('slug_url') or ''))
+        date[:4], date, animelib.rating_of(anime), genres, ANIME_TAG,
+        escape(anime.get('slug_url') or ''))
 
 
 def episode_nfo(ep, season, number, show_title):
@@ -154,3 +160,68 @@ class Library(object):
                 if log:
                     log('Library update failed for %s: %s' % (slug, e))
         return total
+
+
+# --- "Anime" section of the video library ----------------------------------------
+def _copy_tree(src, dst):
+    xbmcvfs.mkdirs(dst)
+    dirs, files = xbmcvfs.listdir(src)
+    for name in files:
+        xbmcvfs.copy(src + name, dst + name)
+    for name in dirs:
+        _copy_tree(src + name + '/', dst + name + '/')
+
+
+def _node(order, label, icon, content, rules, match='all', sort=None, limit=None):
+    body = ''.join('  <rule field="%s" operator="%s">%s</rule>\n' % (
+        field, op, '<value>%s</value>' % escape(value) if value is not None else '')
+        for field, op, value in rules)
+    extra = ''
+    if sort:
+        extra += '  <order direction="%s">%s</order>\n' % (sort[1], sort[0])
+    if limit:
+        extra += '  <limit>%d</limit>\n' % limit
+    return ('<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>\n'
+            '<node order="%d" type="filter">\n  <label>%s</label>\n  <icon>%s</icon>\n'
+            '  <content>%s</content>\n  <match>%s</match>\n%s%s</node>\n') % (
+        order, escape(label), icon, content, match, body, extra)
+
+
+def path_marker(root):
+    """Substring of library paths that identifies titles exported by the add-on.
+    Kodi may store the source path as special://... or translated, so for the default
+    folder only the add-on id is used."""
+    if root.startswith('special://'):
+        return 'plugin.video.animelib'
+    return root
+
+
+def ensure_anime_node(root, labels):
+    """Adds an "Anime" section next to Movies/TV shows. Kodi uses
+    special://profile/library/video/ *instead of* the default nodes once it exists,
+    so the defaults are copied there first. labels: dict with section/all/inprogress/recent."""
+    if not xbmcvfs.exists(NODES_DIR):
+        _copy_tree(SYSTEM_NODES_DIR, NODES_DIR)
+    folder = NODES_DIR + NODE_FOLDER
+    xbmcvfs.mkdirs(folder)
+    marker = path_marker(root)
+    _write(folder + 'index.xml',
+           '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>\n'
+           '<node order="25" visible="Library.HasContent(TVShows)">\n'
+           '  <label>%s</label>\n  <icon>DefaultTVShows.png</icon>\n</node>\n' % escape(labels['section']))
+    _write(folder + 'titles.xml', _node(
+        1, labels['all'], 'DefaultTVShowTitle.png', 'tvshows',
+        [('path', 'contains', marker), ('tag', 'is', ANIME_TAG)], match='any',
+        sort=('sorttitle', 'ascending')))
+    _write(folder + 'inprogress.xml', _node(
+        2, labels['inprogress'], 'DefaultInProgressShows.png', 'tvshows',
+        [('path', 'contains', marker), ('inprogress', 'true', None)],
+        sort=('lastplayed', 'descending')))
+    _write(folder + 'recent.xml', _node(
+        3, labels['recent'], 'DefaultRecentlyAddedEpisodes.png', 'episodes',
+        [('path', 'contains', marker)], sort=('dateadded', 'descending'), limit=50))
+    _write(folder + 'genres.xml', _node(
+        4, labels['genres'], 'DefaultGenre.png', 'tvshows',
+        [('path', 'contains', marker)]).replace('<content>tvshows</content>',
+                                               '<content>tvshows</content>\n  <group>genres</group>'))
+    return folder

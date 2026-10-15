@@ -663,7 +663,8 @@ class Plugin(object):
 
     def do_library_help(self):
         root = (ADDON.getSetting('library_path') or LIBRARY_DEFAULT)
-        xbmcgui.Dialog().textviewer(L(30054), L(30055).replace('%s', xbmcvfs.translatePath(root)))
+        # special:// paths can be typed into "Add videos" even though Browse hides AppData
+        xbmcgui.Dialog().textviewer(L(30054), L(30055).replace('%s', root))
 
     # --- catalog -----------------------------------------------------------------
     def _title(self, item):

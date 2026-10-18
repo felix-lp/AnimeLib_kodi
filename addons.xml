@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addons>
+<addon id="plugin.video.animelib" name="AnimeLib" version="1.6.2" provider-name="felix-lp">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="main.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="xbmc.service" library="service.py" start="login"/>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="ru_RU">Аниме с AnimeLib (anilib.me)</summary>
+        <summary lang="en_GB">Anime from AnimeLib (anilib.me)</summary>
+        <description lang="ru_RU">Каталог, поиск и просмотр аниме с сайта AnimeLib. Видео воспроизводится через плеер Kodik или собственный плеер AnimeLib с выбором озвучки и качества.</description>
+        <description lang="en_GB">Browse, search and watch anime from AnimeLib. Video is played via the Kodik player or AnimeLib's own player with a choice of dub/sub team and quality.</description>
+        <language>ru</language>
+        <platform>all</platform>
+        <license>MIT</license>
+        <source>https://github.com/felix-lp/AnimeLib_kodi</source>
+        <website>https://anilib.me</website>
+        <disclaimer lang="ru_RU">Аддон не связан с AnimeLib. Весь контент предоставляется сторонними сайтами.</disclaimer>
+        <disclaimer lang="en_GB">This add-on is not affiliated with AnimeLib. All content is provided by third-party websites.</disclaimer>
+        <news>1.6.2: иконка аддона — официальный логотип AnimeLib.
+1.6.1: описания берутся с Shikimori — полные, с именами персонажей (у AnimeLib имена из описаний пропадают); жанры с Shikimori, если у AnimeLib их нет. Убран раздел «Аниме» в медиатеке из 1.6.0 (его файлы удаляются автоматически, стандартные разделы Kodi возвращаются как были).
+1.5.3: инструкция по подключению медиатеки: путь вводится вручную (Обзор не показывает скрытую папку AppData).
+1.5.2: исправлены падения Kodi при открытии списков — описания загружаются без потоков Python.
+1.5.1: описания и медиатека больше не упираются в лимит запросов аккаунта (HTTP 429); недоступные тайтлы не запрашиваются повторно.
+1.5.0: добавление аниме в медиатеку Kodi (по одному или целым списком, новые эпизоды добавляются автоматически); тайтлы из ваших списков подсвечиваются цветом списка.
+1.4.0: описание, жанры и фон тайтла видны прямо в каталоге и списках (кэшируются на 2 недели).
+1.3.0: исправлено падение Kodi при остановке видео (отслеживание просмотра перенесено в фоновый сервис); если видеосервер отвечает ошибкой, аддон сам переключается на рабочий.
+1.2.1: исправлены постеры (CDN обложек требует Referer).
+1.2.0: просмотренные эпизоды отмечаются на сайте при 85% (как на сайте), пропуск опенинга, видеосервер выбирается автоматически, качество по умолчанию 1080p.
+1.1.0: вход в аккаунт AnimeLib, «Мои списки», добавление в списки, отметка просмотренных эпизодов, плеер AnimeLib до 1080p.
+1.0.0: первая версия.</news>
+        <assets>
+            <icon>icon.png</icon>
+        </assets>
+    </extension>
+</addon>
+<addon id="repository.animelib" name="AnimeLib Repository" version="1.0.2" provider-name="felix-lp">
+    <extension point="xbmc.addon.repository" name="AnimeLib Repository">
+        <dir>
+            <info compressed="false">https://raw.githubusercontent.com/felix-lp/AnimeLib_kodi/refs/heads/gh-pages/addons.xml</info>
+            <checksum>https://raw.githubusercontent.com/felix-lp/AnimeLib_kodi/refs/heads/gh-pages/addons.xml.md5</checksum>
+            <datadir zip="true">https://raw.githubusercontent.com/felix-lp/AnimeLib_kodi/refs/heads/gh-pages/</datadir>
+        </dir>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="ru_RU">Репозиторий аддона AnimeLib</summary>
+        <summary lang="en_GB">Repository for the AnimeLib add-on</summary>
+        <description lang="ru_RU">Устанавливает аддон AnimeLib и автоматически получает его обновления с GitHub.</description>
+        <description lang="en_GB">Installs the AnimeLib add-on and keeps it updated from GitHub.</description>
+        <platform>all</platform>
+        <license>MIT</license>
+        <assets>
+            <icon>icon.png</icon>
+        </assets>
+    </extension>
+</addon>
+</addons>

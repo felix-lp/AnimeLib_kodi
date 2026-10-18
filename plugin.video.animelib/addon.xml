@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.animelib" name="AnimeLib" version="1.6.1" provider-name="felix-lp">
+<addon id="plugin.video.animelib" name="AnimeLib" version="1.6.2" provider-name="felix-lp">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
     </requires>
@@ -19,7 +19,8 @@
         <website>https://anilib.me</website>
         <disclaimer lang="ru_RU">Аддон не связан с AnimeLib. Весь контент предоставляется сторонними сайтами.</disclaimer>
         <disclaimer lang="en_GB">This add-on is not affiliated with AnimeLib. All content is provided by third-party websites.</disclaimer>
-        <news>1.6.1: описания берутся с Shikimori — полные, с именами персонажей (у AnimeLib имена из описаний пропадают); жанры с Shikimori, если у AnimeLib их нет. Убран раздел «Аниме» в медиатеке из 1.6.0 (его файлы удаляются автоматически, стандартные разделы Kodi возвращаются как были).
+        <news>1.6.2: иконка аддона — официальный логотип AnimeLib.
+1.6.1: описания берутся с Shikimori — полные, с именами персонажей (у AnimeLib имена из описаний пропадают); жанры с Shikimori, если у AnimeLib их нет. Убран раздел «Аниме» в медиатеке из 1.6.0 (его файлы удаляются автоматически, стандартные разделы Kodi возвращаются как были).
 1.5.3: инструкция по подключению медиатеки: путь вводится вручную (Обзор не показывает скрытую папку AppData).
 1.5.2: исправлены падения Kodi при открытии списков — описания загружаются без потоков Python.
 1.5.1: описания и медиатека больше не упираются в лимит запросов аккаунта (HTTP 429); недоступные тайтлы не запрашиваются повторно.

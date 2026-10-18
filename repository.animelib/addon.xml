@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="repository.animelib" name="AnimeLib Repository" version="1.0.1" provider-name="felix-lp">
+<addon id="repository.animelib" name="AnimeLib Repository" version="1.0.2" provider-name="felix-lp">
     <extension point="xbmc.addon.repository" name="AnimeLib Repository">
         <dir>
             <info compressed="false">https://raw.githubusercontent.com/felix-lp/AnimeLib_kodi/refs/heads/gh-pages/addons.xml</info>
